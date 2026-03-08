@@ -51,7 +51,7 @@ WhisperPro helps you speak naturally and get clean text in seconds, with a workf
 2. Download `WhisperPro_1.0.0_x64-setup.exe`
 3. Run the installer and launch WhisperPro
 
-<img width="1096" height="770" alt="Capture d&#39;écran 2026-03-08 192814" src="https://github.com/user-attachments/assets/ee95661f-c1e0-4b0d-8e36-46701d913e2e" />
+<img width="444" height="272" alt="Capture d&#39;écran 2026-03-08 192936" src="https://github.com/user-attachments/assets/6d91cd93-5294-4732-b207-c5a28a4689d7" />
 
 ## Developer quick start
 
