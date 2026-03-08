@@ -63,8 +63,13 @@ type UiText = {
   detectHint: string;
   voicePunctuation: string;
   showWidget: string;
+  widgetPopSound: string;
+  previewSound: string;
+  previewingSound: string;
   widgetOpacity: string;
   widgetOpacityHint: string;
+  widgetPopSoundVolume: string;
+  widgetPopSoundVolumeHint: string;
   library: string;
   installed: string;
   notInstalled: string;
@@ -91,6 +96,7 @@ type UiText = {
   statusRecordingInProgress: string;
   statusRecordingStartFailed: string;
   statusTranscriptionInProgress: string;
+  statusTranslationInProgress: string;
   statusTranscriptionDone: string;
   statusNoSpeechDetected: string;
   statusTranscriptionError: string;
@@ -100,6 +106,7 @@ type UiText = {
   statusHistoryEmptyPartial: string;
   statusEntryDeleted: string;
   statusPressShortcut: string;
+  previewSoundError: string;
   confirmResetOptions: string;
   confirmQuitApp: string;
   errorDeleteFilesIncompletePrefix: string;
@@ -121,7 +128,9 @@ type UiText = {
   tipShortcut: string;
   tipVoicePunctuation: string;
   tipWidget: string;
+  tipWidgetPopSound: string;
   tipWidgetOpacity: string;
+  tipWidgetPopSoundVolume: string;
   tipDownloadModel: string;
   tipDeleteModel: string;
   tipModelPath: string;
@@ -133,7 +142,9 @@ type UiText = {
   ariaHelpShortcut: string;
   ariaHelpPunctuation: string;
   ariaHelpWidget: string;
+  ariaHelpWidgetPopSound: string;
   ariaHelpWidgetOpacity: string;
+  ariaHelpWidgetPopSoundVolume: string;
   ariaHelpModelPath: string;
   ariaHelpWhisperCli: string;
   modelExperience: Record<string, ModelExperience>;
@@ -196,8 +207,13 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     detectHint: 'Utilise "D\u00E9tecter touches" puis clique "Enregistrer".',
     voicePunctuation: "Activer les commandes vocales de ponctuation",
     showWidget: "Afficher le mini-widget",
+    widgetPopSound: "Son d'apparition du widget",
+    previewSound: "Préécouter",
+    previewingSound: "Lecture...",
     widgetOpacity: "Opacit\u00E9 du mini-widget",
     widgetOpacityHint: "Plus bas = plus discret. Valeur appliqu\u00E9e apr\u00E8s Enregistrer.",
+    widgetPopSoundVolume: "Volume du son d'apparition",
+    widgetPopSoundVolumeHint: "R\u00E8gle le volume du son jou\u00E9 quand le widget appara\u00EEt.",
     library: "Biblioth\u00E8que",
     installed: "Install\u00E9",
     notInstalled: "Non install\u00E9",
@@ -230,6 +246,7 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     statusRecordingInProgress: "Enregistrement en cours...",
     statusRecordingStartFailed: "Impossible de d\u00E9marrer l'enregistrement",
     statusTranscriptionInProgress: "Transcription en cours...",
+    statusTranslationInProgress: "Traduction en cours...",
     statusTranscriptionDone: "Transcription termin\u00E9e",
     statusNoSpeechDetected: "Aucune parole d\u00E9tect\u00E9e",
     statusTranscriptionError: "Erreur pendant la transcription",
@@ -239,6 +256,7 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     statusHistoryEmptyPartial: "Historique vide (suppression fichiers partielle)",
     statusEntryDeleted: "Entr\u00E9e supprim\u00E9e",
     statusPressShortcut: "Appuie sur ta combinaison...",
+    previewSoundError: "Impossible de lire ce son",
     confirmResetOptions: "R\u00E9initialiser les options aux valeurs par d\u00E9faut ?",
     confirmQuitApp: "Fermer compl\u00E8tement WhisperPro ?",
     errorDeleteFilesIncompletePrefix: "Suppression des fichiers incompl\u00E8te",
@@ -260,7 +278,9 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     tipShortcut: "Clique \"D\u00E9tecter touches\", fais ta combinaison, puis \"Enregistrer\".",
     tipVoicePunctuation: "Transforme des mots comme \"virgule\", \"point\", \"point d\u2019interrogation\" en ponctuation.",
     tipWidget: "Affiche le widget de statut pendant la dict\u00E9e.",
+    tipWidgetPopSound: "Choisis le son jou\u00E9 quand le widget appara\u00EEt.",
     tipWidgetOpacity: "R\u00E8gle la visibilit\u00E9 du widget: plus bas = plus discret.",
+    tipWidgetPopSoundVolume: "Volume du son jou\u00E9 au pop du widget (0% = muet).",
     tipDownloadModel: "T\u00E9l\u00E9charge ce mod\u00E8le localement.",
     tipDeleteModel: "Supprime ce mod\u00E8le du disque.",
     tipModelPath: "Chemin du fichier mod\u00E8le utilis\u00E9 pour la transcription.",
@@ -272,7 +292,9 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     ariaHelpShortcut: "Aide raccourci clavier",
     ariaHelpPunctuation: "Aide ponctuation vocale",
     ariaHelpWidget: "Aide mini-widget",
+    ariaHelpWidgetPopSound: "Aide son d'apparition widget",
     ariaHelpWidgetOpacity: "Aide opacit\u00E9 widget",
+    ariaHelpWidgetPopSoundVolume: "Aide volume son widget",
     ariaHelpModelPath: "Aide chemin mod\u00E8le",
     ariaHelpWhisperCli: "Aide chemin whisper-cli",
     modelExperience: {
@@ -378,8 +400,13 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     detectHint: 'Use "Detect keys", then click "Save".',
     voicePunctuation: "Enable punctuation voice commands",
     showWidget: "Show mini-widget",
+    widgetPopSound: "Widget pop sound",
+    previewSound: "Preview",
+    previewingSound: "Playing...",
     widgetOpacity: "Mini-widget opacity",
     widgetOpacityHint: "Lower = more discreet. Applied after Save.",
+    widgetPopSoundVolume: "Pop sound volume",
+    widgetPopSoundVolumeHint: "Adjust the sound played when the widget appears.",
     library: "Library",
     installed: "Installed",
     notInstalled: "Not installed",
@@ -412,6 +439,7 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     statusRecordingInProgress: "Recording in progress...",
     statusRecordingStartFailed: "Unable to start recording",
     statusTranscriptionInProgress: "Transcription in progress...",
+    statusTranslationInProgress: "Translation in progress...",
     statusTranscriptionDone: "Transcription completed",
     statusNoSpeechDetected: "No speech detected",
     statusTranscriptionError: "Transcription error",
@@ -421,6 +449,7 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     statusHistoryEmptyPartial: "History cleared (file cleanup partial)",
     statusEntryDeleted: "Entry deleted",
     statusPressShortcut: "Press your key combination...",
+    previewSoundError: "Unable to play this sound",
     confirmResetOptions: "Reset options to default values?",
     confirmQuitApp: "Close WhisperPro completely?",
     errorDeleteFilesIncompletePrefix: "Incomplete file cleanup",
@@ -442,7 +471,9 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     tipShortcut: "Click \"Detect keys\", press your combo, then click \"Save\".",
     tipVoicePunctuation: "Turns words like \"comma\", \"period\" or \"question mark\" into punctuation.",
     tipWidget: "Shows the status mini-widget during dictation.",
+    tipWidgetPopSound: "Choose the sound played when the widget appears.",
     tipWidgetOpacity: "Adjust widget visibility: lower = more discreet.",
+    tipWidgetPopSoundVolume: "Volume of the sound played on widget pop-in (0% = mute).",
     tipDownloadModel: "Download this model locally.",
     tipDeleteModel: "Delete this model from disk.",
     tipModelPath: "Path to the model file used for transcription.",
@@ -454,7 +485,9 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     ariaHelpShortcut: "Shortcut help",
     ariaHelpPunctuation: "Punctuation help",
     ariaHelpWidget: "Widget help",
+    ariaHelpWidgetPopSound: "Widget pop sound help",
     ariaHelpWidgetOpacity: "Widget opacity help",
+    ariaHelpWidgetPopSoundVolume: "Widget sound volume help",
     ariaHelpModelPath: "Model path help",
     ariaHelpWhisperCli: "Whisper-cli path help",
     modelExperience: {

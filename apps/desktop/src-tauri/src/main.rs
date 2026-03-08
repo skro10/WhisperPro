@@ -3,6 +3,8 @@
 use std::collections::HashSet;
 use std::fs;
 use std::io::{Read, Write};
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -25,9 +27,20 @@ use tracing::{error, info};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{fmt, EnvFilter};
 
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+fn apply_no_window(cmd: &mut Command) {
+    #[cfg(target_os = "windows")]
+    {
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct UserSettings {
     language: String,
+    translation_target: String,
     shortcut: String,
     model_path: String,
     whisper_cli_path: String,
@@ -36,6 +49,8 @@ struct UserSettings {
     widget_enabled: bool,
     widget_autohide: bool,
     widget_opacity: f32,
+    widget_pop_sound_volume: f32,
+    widget_pop_sound: String,
     voice_commands_enabled: bool,
     onboarding_completed: bool,
 }
@@ -43,7 +58,8 @@ struct UserSettings {
 impl UserSettings {
     fn with_defaults(model_path: String, whisper_cli_path: String) -> Self {
         Self {
-            language: "fr-FR".to_string(),
+            language: "auto".to_string(),
+            translation_target: "none".to_string(),
             shortcut: "Ctrl+Shift+Space".to_string(),
             model_path,
             whisper_cli_path,
@@ -52,6 +68,8 @@ impl UserSettings {
             widget_enabled: true,
             widget_autohide: true,
             widget_opacity: 0.9,
+            widget_pop_sound_volume: 0.65,
+            widget_pop_sound: "sound1.mp3".to_string(),
             voice_commands_enabled: true,
             onboarding_completed: false,
         }
@@ -110,6 +128,9 @@ struct DictationStatusEvent {
 #[derive(Debug, Clone, Serialize)]
 struct DictationTranscriptEvent {
     text: String,
+    injected_text: String,
+    translation_applied: bool,
+    translation_target: String,
     wav_path: String,
     model_path: String,
     created_at_ms: u64,
@@ -206,6 +227,9 @@ fn save_settings(app: AppHandle, state: State<'_, AppState>, mut settings: UserS
     let app_state = state.inner();
     with_error_log(app_state, || {
         settings.widget_opacity = clamp_widget_opacity(settings.widget_opacity);
+        settings.widget_pop_sound_volume =
+            clamp_widget_pop_sound_volume(settings.widget_pop_sound_volume);
+        settings.translation_target = normalize_translation_target(&settings.translation_target);
         let conn = open_db(&app_state.db_path)?;
         save_settings_impl(&conn, &settings)?;
         register_or_update_global_shortcut(&app, app_state, &settings.shortcut)?;
@@ -219,6 +243,7 @@ fn save_settings(app: AppHandle, state: State<'_, AppState>, mut settings: UserS
         info!(
             target: "settings",
             language = %settings.language,
+            translation_target = %settings.translation_target,
             shortcut = %settings.shortcut,
             model = %settings.model_path,
             whisper_cli = %settings.whisper_cli_path,
@@ -227,6 +252,8 @@ fn save_settings(app: AppHandle, state: State<'_, AppState>, mut settings: UserS
             widget_enabled = settings.widget_enabled,
             widget_autohide = settings.widget_autohide,
             widget_opacity = settings.widget_opacity,
+            widget_pop_sound_volume = settings.widget_pop_sound_volume,
+            widget_pop_sound = %settings.widget_pop_sound,
             voice_commands_enabled = settings.voice_commands_enabled,
             onboarding_completed = settings.onboarding_completed,
             "settings saved"
@@ -410,47 +437,74 @@ fn translate_text(text: String, target_lang: String, source_lang: Option<String>
         .map(normalize_language)
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| "auto".to_string());
-
     let url = "https://translate.googleapis.com/translate_a/single";
-    let response = reqwest::blocking::Client::new()
-        .get(url)
-        .query(&[
-            ("client", "gtx"),
-            ("sl", source.as_str()),
-            ("tl", target.as_str()),
-            ("dt", "t"),
-            ("q", cleaned),
-        ])
-        .send()
-        .map_err(|e| format!("Traduction impossible (reseau): {e}"))?;
+    let client = reqwest::blocking::Client::new();
+    let translate_once = |sl: &str| -> Result<String, String> {
+        let params = [
+            ("client", "gtx".to_string()),
+            ("sl", sl.to_string()),
+            ("tl", target.clone()),
+            ("dt", "t".to_string()),
+            ("q", cleaned.to_string()),
+        ];
 
-    if !response.status().is_success() {
-        return Err(format!(
-            "Traduction impossible: serveur {}",
-            response.status()
-        ));
+        let response = match client.post(url).form(&params).send() {
+            Ok(resp) => resp,
+            Err(_) => client
+                .get(url)
+                .query(&[
+                    ("client", "gtx"),
+                    ("sl", sl),
+                    ("tl", target.as_str()),
+                    ("dt", "t"),
+                    ("q", cleaned),
+                ])
+                .send()
+                .map_err(|e| format!("Traduction impossible (reseau): {e}"))?,
+        };
+
+        if !response.status().is_success() {
+            return Err(format!(
+                "Traduction impossible: serveur {}",
+                response.status()
+            ));
+        }
+
+        let payload = response
+            .text()
+            .map_err(|e| format!("Lecture reponse traduction impossible: {e}"))?;
+        let json: serde_json::Value =
+            serde_json::from_str(&payload).map_err(|e| format!("Reponse traduction invalide: {e}"))?;
+
+        let mut out = String::new();
+        if let Some(segments) = json.get(0).and_then(|v| v.as_array()) {
+            for seg in segments {
+                if let Some(part) = seg.get(0).and_then(|v| v.as_str()) {
+                    out.push_str(part);
+                }
+            }
+        }
+
+        Ok(out.trim().to_string())
+    };
+
+    let first = translate_once(&source)?;
+    if !first.is_empty() && !first.eq_ignore_ascii_case(cleaned) {
+        return Ok(first);
     }
 
-    let payload = response
-        .text()
-        .map_err(|e| format!("Lecture reponse traduction impossible: {e}"))?;
-    let json: serde_json::Value =
-        serde_json::from_str(&payload).map_err(|e| format!("Reponse traduction invalide: {e}"))?;
-
-    let mut out = String::new();
-    if let Some(segments) = json.get(0).and_then(|v| v.as_array()) {
-        for seg in segments {
-            if let Some(part) = seg.get(0).and_then(|v| v.as_str()) {
-                out.push_str(part);
-            }
+    if source != "auto" {
+        let second = translate_once("auto")?;
+        if !second.is_empty() {
+            return Ok(second);
         }
     }
 
-    if out.trim().is_empty() {
-        return Err("La traduction n'a renvoye aucun texte.".to_string());
+    if !first.is_empty() {
+        return Ok(first);
     }
 
-    Ok(out)
+    Err("La traduction n'a renvoye aucun texte.".to_string())
 }
 
 #[tauri::command]
@@ -725,7 +779,7 @@ fn generate_diagnostic_snapshot(state: State<'_, AppState>) -> Result<String, St
         let snapshot_path = log_dir.join(format!("diagnostic-{stamp}.txt"));
 
         let content = format!(
-            "WhisperPro Diagnostic Snapshot\nDateEpochMs: {stamp}\n\nPaths\n- DB: {}\n- Log: {}\n- Model: {} ({})\n- whisper-cli: {} ({})\n\nSettings\n- language: {}\n- shortcut: {}\n- widget_enabled: {}\n- widget_autohide: {}\n- widget_opacity: {:.2}\n- voice_commands_enabled: {}\n- onboarding_completed: {}\n\nRuntime\n- dictation_state: {}\n- dictation_message: {}\n- dictation_recording: {}\n- dictation_busy: {}\n- last_error: {}\n",
+            "WhisperPro Diagnostic Snapshot\nDateEpochMs: {stamp}\n\nPaths\n- DB: {}\n- Log: {}\n- Model: {} ({})\n- whisper-cli: {} ({})\n\nSettings\n- language: {}\n- translation_target: {}\n- shortcut: {}\n- widget_enabled: {}\n- widget_autohide: {}\n- widget_opacity: {:.2}\n- widget_pop_sound_volume: {:.2}\n- widget_pop_sound: {}\n- voice_commands_enabled: {}\n- onboarding_completed: {}\n\nRuntime\n- dictation_state: {}\n- dictation_message: {}\n- dictation_recording: {}\n- dictation_busy: {}\n- last_error: {}\n",
             app_state.db_path.to_string_lossy(),
             app_state.log_path.to_string_lossy(),
             settings.model_path,
@@ -733,10 +787,13 @@ fn generate_diagnostic_snapshot(state: State<'_, AppState>) -> Result<String, St
             settings.whisper_cli_path,
             if cli_exists { "OK" } else { "KO" },
             settings.language,
+            settings.translation_target,
             settings.shortcut,
             settings.widget_enabled,
             settings.widget_autohide,
             settings.widget_opacity,
+            settings.widget_pop_sound_volume,
+            settings.widget_pop_sound,
             settings.voice_commands_enabled,
             settings.onboarding_completed,
             status.state,
@@ -1079,12 +1136,30 @@ fn toggle_dictation_cycle_impl(app: &AppHandle, app_state: &AppState) -> Result<
         if post_processed_text.trim().is_empty() {
             return Ok("Aucune parole detectee".to_string());
         }
-        if should_skip_duplicate_injection(app_state, &post_processed_text) {
+
+        let text_for_injection = if normalize_translation_target(&settings.translation_target) != "none" {
+            match translate_text(
+                post_processed_text.clone(),
+                settings.translation_target.clone(),
+                Some(settings.language.clone()),
+            ) {
+                Ok(translated) if !translated.trim().is_empty() => translated,
+                Ok(_) => post_processed_text.clone(),
+                Err(e) => {
+                    info!(target: "translate", reason = %e, "translation failed during injection, fallback to source text");
+                    post_processed_text.clone()
+                }
+            }
+        } else {
+            post_processed_text.clone()
+        };
+
+        if should_skip_duplicate_injection(app_state, &text_for_injection) {
             return Ok("Texte deja injecte (doublon evite)".to_string());
         }
 
-        let report = inject_text_with_retry(&post_processed_text)?;
-        mark_successful_injection(app_state, &post_processed_text);
+        let report = inject_text_with_retry(&text_for_injection)?;
+        mark_successful_injection(app_state, &text_for_injection);
         info!(
             target: "inject",
             mode = report.mode,
@@ -1099,6 +1174,9 @@ fn toggle_dictation_cycle_impl(app: &AppHandle, app_state: &AppState) -> Result<
             .as_millis() as u64;
         let payload = DictationTranscriptEvent {
             text: post_processed_text.clone(),
+            injected_text: text_for_injection.clone(),
+            translation_applied: normalize_translation_target(&settings.translation_target) != "none",
+            translation_target: normalize_translation_target(&settings.translation_target),
             wav_path: wav_path.clone(),
             model_path: settings.model_path.clone(),
             created_at_ms,
@@ -1318,7 +1396,7 @@ fn get_settings_from_db(
     let fallback_whisper_cli_path = default_whisper_cli_path.to_string_lossy().to_string();
 
     let mut stmt = conn
-        .prepare("SELECT language, shortcut, model_path, whisper_cli_path, compute_mode, keep_model_loaded, widget_enabled, widget_autohide, voice_commands_enabled, onboarding_completed, widget_opacity FROM settings WHERE id = 1")
+        .prepare("SELECT language, translation_target, shortcut, model_path, whisper_cli_path, compute_mode, keep_model_loaded, widget_enabled, widget_autohide, voice_commands_enabled, onboarding_completed, widget_opacity, widget_pop_sound_volume, widget_pop_sound FROM settings WHERE id = 1")
         .map_err(|e| format!("Lecture settings impossible: {e}"))?;
 
     let mut rows = stmt
@@ -1330,32 +1408,38 @@ fn get_settings_from_db(
         .map_err(|e| format!("Lecture settings impossible: {e}"))?
     {
         let model_path_from_db: String = row
-            .get::<_, String>(2)
+            .get::<_, String>(3)
             .map_err(|e| format!("Lecture model_path impossible: {e}"))?;
         let whisper_cli_from_db: String = row
-            .get::<_, String>(3)
+            .get::<_, String>(4)
             .map_err(|e| format!("Lecture whisper_cli_path impossible: {e}"))?;
         let compute_mode_from_db: String = row
-            .get::<_, String>(4)
+            .get::<_, String>(5)
             .map_err(|e| format!("Lecture compute_mode impossible: {e}"))?;
         let keep_model_loaded: i64 = row
-            .get::<_, i64>(5)
+            .get::<_, i64>(6)
             .map_err(|e| format!("Lecture keep_model_loaded impossible: {e}"))?;
         let widget_enabled: i64 = row
-            .get::<_, i64>(6)
+            .get::<_, i64>(7)
             .map_err(|e| format!("Lecture widget_enabled impossible: {e}"))?;
         let widget_autohide: i64 = row
-            .get::<_, i64>(7)
+            .get::<_, i64>(8)
             .map_err(|e| format!("Lecture widget_autohide impossible: {e}"))?;
         let voice_commands_enabled: i64 = row
-            .get::<_, i64>(8)
+            .get::<_, i64>(9)
             .map_err(|e| format!("Lecture voice_commands_enabled impossible: {e}"))?;
         let onboarding_completed: i64 = row
-            .get::<_, i64>(9)
+            .get::<_, i64>(10)
             .map_err(|e| format!("Lecture onboarding_completed impossible: {e}"))?;
         let widget_opacity: f64 = row
-            .get::<_, f64>(10)
+            .get::<_, f64>(11)
             .map_err(|e| format!("Lecture widget_opacity impossible: {e}"))?;
+        let widget_pop_sound_volume: f64 = row
+            .get::<_, f64>(12)
+            .map_err(|e| format!("Lecture widget_pop_sound_volume impossible: {e}"))?;
+        let widget_pop_sound: String = row
+            .get::<_, String>(13)
+            .map_err(|e| format!("Lecture widget_pop_sound impossible: {e}"))?;
 
         let selected_model_path = resolve_active_model_path(&model_path_from_db, &fallback_model_path);
         let selected_cli_path = if whisper_cli_from_db.trim().is_empty() {
@@ -1368,8 +1452,12 @@ fn get_settings_from_db(
             language: row
                 .get::<_, String>(0)
                 .map_err(|e| format!("Lecture language impossible: {e}"))?,
+            translation_target: normalize_translation_target(
+                &row.get::<_, String>(1)
+                    .map_err(|e| format!("Lecture translation_target impossible: {e}"))?,
+            ),
             shortcut: row
-                .get::<_, String>(1)
+                .get::<_, String>(2)
                 .map_err(|e| format!("Lecture shortcut impossible: {e}"))?,
             model_path: selected_model_path.clone(),
             whisper_cli_path: selected_cli_path.clone(),
@@ -1378,6 +1466,8 @@ fn get_settings_from_db(
             widget_enabled: widget_enabled != 0,
             widget_autohide: widget_autohide != 0,
             widget_opacity: clamp_widget_opacity(widget_opacity as f32),
+            widget_pop_sound_volume: clamp_widget_pop_sound_volume(widget_pop_sound_volume as f32),
+            widget_pop_sound: normalize_widget_pop_sound(&widget_pop_sound),
             voice_commands_enabled: voice_commands_enabled != 0,
             onboarding_completed: onboarding_completed != 0,
         };
@@ -1395,10 +1485,11 @@ fn get_settings_from_db(
 
 fn save_settings_impl(conn: &Connection, settings: &UserSettings) -> Result<(), String> {
     conn.execute(
-        "INSERT INTO settings (id, language, shortcut, model_path, whisper_cli_path, compute_mode, keep_model_loaded, widget_enabled, widget_autohide, voice_commands_enabled, onboarding_completed, widget_opacity) VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
-         ON CONFLICT(id) DO UPDATE SET language = excluded.language, shortcut = excluded.shortcut, model_path = excluded.model_path, whisper_cli_path = excluded.whisper_cli_path, compute_mode = excluded.compute_mode, keep_model_loaded = excluded.keep_model_loaded, widget_enabled = excluded.widget_enabled, widget_autohide = excluded.widget_autohide, voice_commands_enabled = excluded.voice_commands_enabled, onboarding_completed = excluded.onboarding_completed, widget_opacity = excluded.widget_opacity",
+        "INSERT INTO settings (id, language, translation_target, shortcut, model_path, whisper_cli_path, compute_mode, keep_model_loaded, widget_enabled, widget_autohide, voice_commands_enabled, onboarding_completed, widget_opacity, widget_pop_sound_volume, widget_pop_sound) VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+         ON CONFLICT(id) DO UPDATE SET language = excluded.language, translation_target = excluded.translation_target, shortcut = excluded.shortcut, model_path = excluded.model_path, whisper_cli_path = excluded.whisper_cli_path, compute_mode = excluded.compute_mode, keep_model_loaded = excluded.keep_model_loaded, widget_enabled = excluded.widget_enabled, widget_autohide = excluded.widget_autohide, voice_commands_enabled = excluded.voice_commands_enabled, onboarding_completed = excluded.onboarding_completed, widget_opacity = excluded.widget_opacity, widget_pop_sound_volume = excluded.widget_pop_sound_volume, widget_pop_sound = excluded.widget_pop_sound",
         params![
             settings.language,
+            normalize_translation_target(&settings.translation_target),
             settings.shortcut,
             settings.model_path,
             settings.whisper_cli_path,
@@ -1408,7 +1499,9 @@ fn save_settings_impl(conn: &Connection, settings: &UserSettings) -> Result<(), 
             if settings.widget_autohide { 1 } else { 0 },
             if settings.voice_commands_enabled { 1 } else { 0 },
             if settings.onboarding_completed { 1 } else { 0 },
-            clamp_widget_opacity(settings.widget_opacity)
+            clamp_widget_opacity(settings.widget_opacity),
+            clamp_widget_pop_sound_volume(settings.widget_pop_sound_volume),
+            normalize_widget_pop_sound(&settings.widget_pop_sound)
         ],
     )
     .map_err(|e| format!("Sauvegarde settings impossible: {e}"))?;
@@ -1430,6 +1523,7 @@ fn init_db(db_path: &PathBuf, default_model_path: &Path, default_whisper_cli_pat
 
     let _ = conn.execute("ALTER TABLE settings ADD COLUMN model_path TEXT NOT NULL DEFAULT ''", []);
     let _ = conn.execute("ALTER TABLE settings ADD COLUMN whisper_cli_path TEXT NOT NULL DEFAULT ''", []);
+    let _ = conn.execute("ALTER TABLE settings ADD COLUMN translation_target TEXT NOT NULL DEFAULT 'none'", []);
     let _ = conn.execute("ALTER TABLE settings ADD COLUMN compute_mode TEXT NOT NULL DEFAULT 'auto'", []);
     let _ = conn.execute("ALTER TABLE settings ADD COLUMN keep_model_loaded INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE settings ADD COLUMN widget_enabled INTEGER NOT NULL DEFAULT 1", []);
@@ -1437,6 +1531,8 @@ fn init_db(db_path: &PathBuf, default_model_path: &Path, default_whisper_cli_pat
     let _ = conn.execute("ALTER TABLE settings ADD COLUMN voice_commands_enabled INTEGER NOT NULL DEFAULT 1", []);
     let _ = conn.execute("ALTER TABLE settings ADD COLUMN onboarding_completed INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE settings ADD COLUMN widget_opacity REAL NOT NULL DEFAULT 0.9", []);
+    let _ = conn.execute("ALTER TABLE settings ADD COLUMN widget_pop_sound_volume REAL NOT NULL DEFAULT 0.65", []);
+    let _ = conn.execute("ALTER TABLE settings ADD COLUMN widget_pop_sound TEXT NOT NULL DEFAULT 'sound1.mp3'", []);
 
     let existing_count: i64 = conn
         .query_row("SELECT COUNT(*) FROM settings WHERE id = 1", [], |row| row.get(0))
@@ -1837,6 +1933,7 @@ fn run_whisper_once(
 ) -> Result<std::process::Output, String> {
     let (supports_ngl, supports_ng) = detect_whisper_gpu_flags(whisper_cli_path);
     let mut cmd = Command::new(whisper_cli_path);
+    apply_no_window(&mut cmd);
     cmd.arg("-m")
         .arg(model_path)
         .arg("-f")
@@ -2004,6 +2101,7 @@ fn ensure_whisper_server_running(
 
     let port: u16 = 8178;
     let mut cmd = Command::new(server_exe);
+    apply_no_window(&mut cmd);
     cmd.arg("-m")
         .arg(model_path)
         .arg("-l")
@@ -2060,7 +2158,9 @@ fn wait_for_server_ready(port: u16) -> Result<u16, String> {
 }
 
 fn detect_whisper_gpu_flags(whisper_cli_path: &Path) -> (bool, bool) {
-    let output = Command::new(whisper_cli_path).arg("--help").output();
+    let mut cmd = Command::new(whisper_cli_path);
+    apply_no_window(&mut cmd);
+    let output = cmd.arg("--help").output();
     let Ok(output) = output else {
         return (false, false);
     };
@@ -2197,8 +2297,30 @@ fn normalize_compute_mode(mode: &str) -> String {
     }
 }
 
+fn normalize_translation_target(target: &str) -> String {
+    let t = target.trim().to_lowercase();
+    if t.is_empty() {
+        "none".to_string()
+    } else {
+        t
+    }
+}
+
 fn clamp_widget_opacity(value: f32) -> f32 {
     value.clamp(0.25, 1.0)
+}
+
+fn clamp_widget_pop_sound_volume(value: f32) -> f32 {
+    value.clamp(0.0, 1.0)
+}
+
+fn normalize_widget_pop_sound(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        "sound1.mp3".to_string()
+    } else {
+        trimmed.to_string()
+    }
 }
 
 fn apply_voice_commands(text: &str) -> String {
@@ -2453,10 +2575,6 @@ fn download_model_with_paths(
 ) -> Result<String, String> {
     let entry = model_catalog_entry(&model_id)
         .ok_or_else(|| format!("Modele inconnu: {}", model_id))?;
-    let model_dir = models_dir_from_default_path(&model_default_path)?;
-    fs::create_dir_all(&model_dir).map_err(|e| format!("Creation dossier modeles impossible: {e}"))?;
-
-    let target = model_dir.join(entry.filename);
     emit_model_download_progress(
         app,
         ModelDownloadProgressEvent {
@@ -2468,6 +2586,10 @@ fn download_model_with_paths(
             message: format!("Preparation du telechargement: {}", entry.label),
         },
     );
+    let model_dir = models_dir_from_default_path(&model_default_path)?;
+    fs::create_dir_all(&model_dir).map_err(|e| format!("Creation dossier modeles impossible: {e}"))?;
+
+    let target = model_dir.join(entry.filename);
 
     if !target.exists() {
         let mut response = reqwest::blocking::get(entry.download_url)
@@ -2765,29 +2887,31 @@ fn copy_runtime_from_resources(app: &AppHandle, app_state: &AppState) -> Result<
 }
 
 fn detect_gpu_vendor() -> GpuVendor {
-    if let Ok(output) = Command::new("nvidia-smi").output() {
+    let mut nvidia = Command::new("nvidia-smi");
+    apply_no_window(&mut nvidia);
+    if let Ok(output) = nvidia.output() {
         if output.status.success() {
             return GpuVendor::Nvidia;
         }
     }
 
     let mut combined = String::new();
-    if let Ok(output) = Command::new("cmd")
-        .args(["/C", "wmic path win32_VideoController get name"])
-        .output()
-    {
+    let mut wmic = Command::new("cmd");
+    wmic.args(["/C", "wmic path win32_VideoController get name"]);
+    apply_no_window(&mut wmic);
+    if let Ok(output) = wmic.output() {
         combined.push_str(&String::from_utf8_lossy(&output.stdout).to_lowercase());
         combined.push_str(&String::from_utf8_lossy(&output.stderr).to_lowercase());
     }
     if combined.is_empty() {
-        if let Ok(output) = Command::new("powershell")
-            .args([
-                "-NoProfile",
-                "-Command",
-                "(Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name) -join \"`n\"",
-            ])
-            .output()
-        {
+        let mut ps = Command::new("powershell");
+        ps.args([
+            "-NoProfile",
+            "-Command",
+            "(Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name) -join \"`n\"",
+        ]);
+        apply_no_window(&mut ps);
+        if let Ok(output) = ps.output() {
             combined.push_str(&String::from_utf8_lossy(&output.stdout).to_lowercase());
             combined.push_str(&String::from_utf8_lossy(&output.stderr).to_lowercase());
         }
@@ -3089,10 +3213,26 @@ fn main() {
             model_download_active_id: Mutex::new(None),
         })
         .setup(|app| {
+            let app_handle_for_bootstrap = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let app_handle_inner = app_handle_for_bootstrap.clone();
+                let result = tauri::async_runtime::spawn_blocking(move || {
+                    let state = app_handle_inner.state::<AppState>();
+                    ensure_runtime_dependencies(&app_handle_inner, state.inner())
+                })
+                .await;
+                match result {
+                    Ok(Ok(())) => {}
+                    Ok(Err(e)) => {
+                        error!(target: "bootstrap", reason = %e, "runtime dependency bootstrap failed");
+                    }
+                    Err(e) => {
+                        error!(target: "bootstrap", reason = %e, "runtime dependency bootstrap task join failed");
+                    }
+                }
+            });
+
             let state = app.state::<AppState>();
-            if let Err(e) = ensure_runtime_dependencies(app.handle(), state.inner()) {
-                error!(target: "bootstrap", reason = %e, "runtime dependency bootstrap failed");
-            }
             let settings = get_settings_from_db(
                 &state.db_path,
                 &state.model_default_path,

@@ -6,6 +6,7 @@ import { UI_LANGUAGE_STORAGE_KEY, UI_TEXT, type UiLanguage } from "./i18n";
 
 type UserSettings = {
   language: string;
+  translation_target: string;
   shortcut: string;
   model_path: string;
   whisper_cli_path: string;
@@ -14,6 +15,8 @@ type UserSettings = {
   widget_enabled: boolean;
   widget_autohide: boolean;
   widget_opacity: number;
+  widget_pop_sound_volume: number;
+  widget_pop_sound: string;
   voice_commands_enabled: boolean;
   onboarding_completed: boolean;
 };
@@ -46,6 +49,9 @@ type DictationStatusEvent = {
 
 type DictationTranscriptEvent = {
   text: string;
+  injected_text: string;
+  translation_applied: boolean;
+  translation_target: string;
   wav_path: string;
   model_path: string;
   created_at_ms: number;
@@ -79,6 +85,25 @@ type ModelDownloadProgressEvent = {
 
 const HISTORY_KEY = "whisperpro_transcription_history";
 const MAX_HISTORY_ITEMS = 20;
+const DEFAULT_WIDGET_POP_SOUND = "sound1.mp3";
+const WIDGET_SOUND_GAIN: Record<string, number> = {
+  "sound1.mp3": 1.0,
+  "sound2.mp3": 0.78,
+  "sound3.mp3": 0.95,
+  "sound4.mp3": 0.74,
+  "sound5.mp3": 0.96,
+  "sound6.mp3": 0.8,
+  "sound7.mp3": 0.84,
+  "sound8.mp3": 1.0,
+  "sound9.mp3": 0.92
+};
+
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+
+const getWidgetSoundGain = (fileName: string) => {
+  const key = (fileName || "").trim().toLowerCase();
+  return WIDGET_SOUND_GAIN[key] ?? 1.0;
+};
 
 const LANGUAGE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "auto", label: "Auto (détection)" },
@@ -130,6 +155,7 @@ const COMPUTE_MODE_VALUES: Array<{ value: UserSettings["compute_mode"] }> = [
 
 const defaultSettings: UserSettings = {
   language: "auto",
+  translation_target: "none",
   shortcut: "Ctrl+Shift+Space",
   model_path: "",
   whisper_cli_path: "",
@@ -138,6 +164,8 @@ const defaultSettings: UserSettings = {
   widget_enabled: true,
   widget_autohide: true,
   widget_opacity: 0.9,
+  widget_pop_sound_volume: 0.65,
+  widget_pop_sound: DEFAULT_WIDGET_POP_SOUND,
   voice_commands_enabled: true,
   onboarding_completed: true
 };
@@ -146,13 +174,45 @@ function OverlayWidget() {
   const [uiLanguage, setUiLanguage] = useState<UiLanguage>("fr");
   const [state, setState] = useState<string>("idle");
   const [widgetOpacity, setWidgetOpacity] = useState(defaultSettings.widget_opacity);
+  const [widgetPopSoundVolume, setWidgetPopSoundVolume] = useState(defaultSettings.widget_pop_sound_volume);
+  const [widgetPopSound, setWidgetPopSound] = useState(defaultSettings.widget_pop_sound);
   const uiText = UI_TEXT[uiLanguage];
   const terminalStateAtRef = useRef<number>(0);
   const terminalLockUntilRef = useRef<number>(0);
   const stateRef = useRef<string>("idle");
+  const popAudioRef = useRef<HTMLAudioElement | null>(null);
+  const isPoppingSoundRef = useRef(false);
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useEffect(() => {
+    const audio = new Audio(`/sounds/${widgetPopSound}`);
+    audio.preload = "auto";
+    popAudioRef.current = audio;
+    return () => {
+      popAudioRef.current = null;
+    };
+  }, [widgetPopSound]);
+
+  const playWidgetPopSound = () => {
+    if (widgetPopSoundVolume <= 0) return;
+    const audio = popAudioRef.current;
+    if (!audio || isPoppingSoundRef.current) return;
+    isPoppingSoundRef.current = true;
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.volume = clamp01(widgetPopSoundVolume * getWidgetSoundGain(widgetPopSound));
+      void audio.play().catch(() => {
+        // no sound asset yet or playback blocked by platform policy
+      }).finally(() => {
+        isPoppingSoundRef.current = false;
+      });
+    } catch {
+      isPoppingSoundRef.current = false;
+    }
+  };
 
   const applyWidgetState = (nextState: string) => {
     const now = Date.now();
@@ -177,6 +237,11 @@ function OverlayWidget() {
       if (terminalLockUntilRef.current !== 0 && now < terminalLockUntilRef.current) return;
       terminalStateAtRef.current = 0;
       terminalLockUntilRef.current = 0;
+      const wasActive =
+        stateRef.current === "listening" || stateRef.current === "transcribing" || stateRef.current === "busy";
+      if (!wasActive) {
+        playWidgetPopSound();
+      }
       setState(nextState);
       return;
     }
@@ -253,6 +318,8 @@ function OverlayWidget() {
         ]);
         applyWidgetState(status.state);
         setWidgetOpacity(Math.max(0.25, Math.min(1, loadedSettings.widget_opacity ?? defaultSettings.widget_opacity)));
+        setWidgetPopSoundVolume(Math.max(0, Math.min(1, loadedSettings.widget_pop_sound_volume ?? defaultSettings.widget_pop_sound_volume)));
+        setWidgetPopSound((loadedSettings.widget_pop_sound || DEFAULT_WIDGET_POP_SOUND).trim() || DEFAULT_WIDGET_POP_SOUND);
       } catch {
         // ignore
       }
@@ -268,6 +335,10 @@ function OverlayWidget() {
 
       unlistenSettings = await listen<UserSettings>("settings-updated", (event) => {
         setWidgetOpacity(Math.max(0.25, Math.min(1, event.payload.widget_opacity ?? defaultSettings.widget_opacity)));
+        setWidgetPopSoundVolume(
+          Math.max(0, Math.min(1, event.payload.widget_pop_sound_volume ?? defaultSettings.widget_pop_sound_volume))
+        );
+        setWidgetPopSound((event.payload.widget_pop_sound || DEFAULT_WIDGET_POP_SOUND).trim() || DEFAULT_WIDGET_POP_SOUND);
       });
     };
 
@@ -332,6 +403,7 @@ function MainApp() {
 
   const [recording, setRecording] = useState(false);
   const [working, setWorking] = useState(false);
+  const [translating, setTranslating] = useState(false);
   const [wavPath, setWavPath] = useState("");
   const [transcript, setTranscript] = useState("");
   const [translatedText, setTranslatedText] = useState("");
@@ -351,6 +423,9 @@ function MainApp() {
   const [downloadingModelId, setDownloadingModelId] = useState<string | null>(null);
   const [computeCapability, setComputeCapability] = useState<ComputeCapabilityReport | null>(null);
   const [runtimeSetupBusy, setRuntimeSetupBusy] = useState(false);
+  const [widgetSoundOptions, setWidgetSoundOptions] = useState<string[]>([DEFAULT_WIDGET_POP_SOUND]);
+  const [previewSoundPlaying, setPreviewSoundPlaying] = useState(false);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const uiText = UI_TEXT[uiLanguage];
 
   const modelDisplayLabel = (model: { id: string; label: string }) => uiText.modelLabels[model.id] ?? model.label;
@@ -405,13 +480,60 @@ function MainApp() {
     return normalized.split("/").pop() ?? uiText.unknown;
   };
 
+  const modelFileFromPath = (path: string) => {
+    if (!path) return "";
+    return path.replaceAll("\\", "/").split("/").pop()?.toLowerCase() ?? "";
+  };
+
+  const updateModelMismatchWarning = async (usedModelPath: string) => {
+    const usedModelFile = modelFileFromPath(usedModelPath);
+    if (!usedModelFile) return;
+
+    try {
+      const latestSettings = normalizeSettingsForUi(await invoke<UserSettings>("get_settings"));
+      const selectedModelFile = modelFileFromPath(latestSettings.model_path);
+      if (selectedModelFile && selectedModelFile !== usedModelFile) {
+        setErrorLine(
+          `${uiText.warningSelectedModelMismatchPrefix} (${selectedModelFile}) ${uiText.warningSelectedModelMismatchConnector} (${usedModelFile}).`
+        );
+      } else {
+        setErrorLine("");
+      }
+      return;
+    } catch {
+      // fallback below
+    }
+
+    const fallbackSelected =
+      models.find((model) => model.active)?.filename?.toLowerCase() ?? modelFileFromPath(settings.model_path);
+    if (fallbackSelected && fallbackSelected !== usedModelFile) {
+      setErrorLine(
+        `${uiText.warningSelectedModelMismatchPrefix} (${fallbackSelected}) ${uiText.warningSelectedModelMismatchConnector} (${usedModelFile}).`
+      );
+    } else {
+      setErrorLine("");
+    }
+  };
+
   const normalizeSettingsForUi = (loaded: UserSettings): UserSettings => {
     const normalizedOpacity = Math.max(0.25, Math.min(1, loaded.widget_opacity ?? defaultSettings.widget_opacity));
+    const normalizedPopSoundVolume = Math.max(0, Math.min(1, loaded.widget_pop_sound_volume ?? defaultSettings.widget_pop_sound_volume));
+    const normalizedPopSound = (loaded.widget_pop_sound || DEFAULT_WIDGET_POP_SOUND).trim() || DEFAULT_WIDGET_POP_SOUND;
+    const normalizedTranslationTarget = (loaded.translation_target || "none").trim().toLowerCase() || "none";
     return {
       ...loaded,
       keep_model_loaded: false,
-      widget_opacity: normalizedOpacity
+      translation_target: normalizedTranslationTarget,
+      widget_opacity: normalizedOpacity,
+      widget_pop_sound_volume: normalizedPopSoundVolume,
+      widget_pop_sound: normalizedPopSound
     };
+  };
+
+  const widgetSoundLabel = (fileName: string) => {
+    const match = fileName.toLowerCase().match(/^sound(\d+)\.[a-z0-9]+$/);
+    if (match) return `Sound ${match[1]}`;
+    return fileName;
   };
 
   const addHistoryItem = (text: string, sourceWavPath: string, modelPath: string, createdAtMs?: number) => {
@@ -436,19 +558,41 @@ function MainApp() {
     });
   };
 
-  const translateTextIfNeeded = async (sourceText: string, sourceLanguage: string) => {
+  const translateTextIfNeeded = async (sourceText: string, sourceLanguage: string, sourceWavPath?: string) => {
     if (translationTarget === "none" || !sourceText.trim()) {
       setTranslatedText("");
       setTranslationError("");
+      setTranslating(false);
       return;
     }
 
+    setTranslating(true);
+    setStatusLine(uiText.statusTranslationInProgress);
     try {
-      const translated = await invoke<string>("translate_text", {
+      if (translationTarget === "en" && sourceWavPath) {
+        const translatedFromWhisper = await invoke<TranscriptionResult>("translate_wav_to_english", {
+          wavPath: sourceWavPath
+        });
+        const cleanedTranslated = translatedFromWhisper.text?.trim() ?? "";
+        if (cleanedTranslated) {
+          setTranslatedText(cleanedTranslated);
+          setTranslationError("");
+          setTextView("translated");
+          setStatusLine(uiText.statusTranslationDone);
+          setTranslating(false);
+          return;
+        }
+      }
+
+      const payload: { text: string; targetLang: string; sourceLang?: string } = {
         text: sourceText,
-        targetLang: translationTarget,
-        sourceLang: sourceLanguage
-      });
+        targetLang: translationTarget
+      };
+      const normalizedSource = sourceLanguage.trim().toLowerCase();
+      if (normalizedSource && normalizedSource !== "auto") {
+        payload.sourceLang = sourceLanguage;
+      }
+      const translated = await invoke<string>("translate_text", payload);
       setTranslatedText(translated);
       setTranslationError("");
       setTextView("translated");
@@ -457,6 +601,8 @@ function MainApp() {
       setTranslationError(String(e));
       setTextView("source");
       setStatusLine(uiText.statusTranscriptionDoneNoTranslation);
+    } finally {
+      setTranslating(false);
     }
   };
 
@@ -490,6 +636,19 @@ function MainApp() {
     } finally {
       setHistoryReady(true);
     }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      const audio = previewAudioRef.current;
+      if (!audio) return;
+      try {
+        audio.pause();
+      } catch {
+        // ignore
+      }
+      previewAudioRef.current = null;
+    };
   }, []);
 
   useEffect(() => {
@@ -532,6 +691,31 @@ function MainApp() {
   }, [uiLanguage]);
 
   useEffect(() => {
+    let cancelled = false;
+    const loadSounds = async () => {
+      try {
+        const response = await fetch("/sounds/index.json", { cache: "no-store" });
+        if (!response.ok) return;
+        const list = (await response.json()) as string[];
+        const normalized = Array.from(new Set(list.map((s) => String(s).trim()).filter(Boolean)));
+        if (!cancelled && normalized.length > 0) {
+          setWidgetSoundOptions(normalized);
+          setSettings((current) => {
+            if (normalized.includes(current.widget_pop_sound)) return current;
+            return { ...current, widget_pop_sound: normalized[0] };
+          });
+        }
+      } catch {
+        // keep fallback sound list
+      }
+    };
+    void loadSounds();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!historyReady) return;
     localStorage.setItem(HISTORY_KEY, JSON.stringify(historyItems));
   }, [historyItems, historyReady]);
@@ -556,6 +740,7 @@ function MainApp() {
           model_path: env.model_path,
           whisper_cli_path: env.whisper_cli_path
         });
+        setTranslationTarget((loadedSettings.translation_target || "none").trim().toLowerCase() || "none");
         setShortcutDraft(loadedSettings.shortcut);
         await refreshModels();
         try {
@@ -571,7 +756,7 @@ function MainApp() {
       }
 
       unlisten = await listen<DictationStatusEvent>("dictation-status", (event) => {
-        if (!working && !recording) setStatusLine(event.payload.message);
+        if (!working && !recording && !translating) setStatusLine(event.payload.message);
       });
     };
 
@@ -579,7 +764,7 @@ function MainApp() {
     return () => {
       if (unlisten) unlisten();
     };
-  }, [recording, working]);
+  }, [recording, working, translating]);
 
   useEffect(() => {
     let unlistenTranscript: (() => void) | null = null;
@@ -590,15 +775,27 @@ function MainApp() {
         setTranscript(payload.text);
         setWavPath(payload.wav_path);
         addHistoryItem(payload.text, payload.wav_path, payload.model_path, payload.created_at_ms);
-        setTextView("source");
-        const selectedModel = settings.model_path.replaceAll("\\", "/").toLowerCase();
-        const usedModel = payload.model_path.replaceAll("\\", "/").toLowerCase();
-        if (selectedModel && usedModel && selectedModel !== usedModel) {
-          setErrorLine(
-            `${uiText.warningSelectedModelMismatchPrefix} (${modelLabelFromPath(settings.model_path)}) ${uiText.warningSelectedModelMismatchConnector} (${modelLabelFromPath(payload.model_path)}).`
-          );
+        if (translationTarget !== "none" || payload.translation_applied) {
+          if (payload.translation_applied) {
+            const usedTarget = (payload.translation_target || "").trim().toLowerCase();
+            if (usedTarget && usedTarget !== "none" && usedTarget !== translationTarget) {
+              setTranslationTarget(usedTarget);
+            }
+            setTranslatedText(payload.injected_text || "");
+            setTranslationError("");
+            setTextView("translated");
+            setStatusLine(uiText.statusTranslationDone);
+          } else {
+            setTranslatedText("");
+            setTextView("translated");
+          }
+        } else {
+          setTextView("source");
         }
-        void translateTextIfNeeded(payload.text, settings.language);
+        void updateModelMismatchWarning(payload.model_path);
+        if (!payload.translation_applied) {
+          void translateTextIfNeeded(payload.text, settings.language, payload.wav_path);
+        }
         if (translationTarget === "none") setStatusLine(`${uiText.statusTranscriptionDone} (${modelLabelFromPath(payload.model_path)})`);
       });
     };
@@ -607,7 +804,7 @@ function MainApp() {
     return () => {
       if (unlistenTranscript) unlistenTranscript();
     };
-  }, [translationTarget, settings.language]);
+  }, [translationTarget, settings.language, settings.model_path, models]);
 
   useEffect(() => {
     let unlistenDownload: (() => void) | null = null;
@@ -706,15 +903,27 @@ function MainApp() {
       widget_enabled: defaultSettings.widget_enabled,
       widget_autohide: defaultSettings.widget_autohide,
       widget_opacity: defaultSettings.widget_opacity,
+      widget_pop_sound_volume: defaultSettings.widget_pop_sound_volume,
+      widget_pop_sound: defaultSettings.widget_pop_sound,
       voice_commands_enabled: defaultSettings.voice_commands_enabled
     };
     setShortcutDraft(next.shortcut);
+    setTranslationTarget(next.translation_target);
     await saveSettingsSnapshot(next, uiText.settingsResetDone);
   };
 
   const downloadModel = async (modelId: string) => {
     setDownloadingModelId(modelId);
     setModelsError("");
+    setDownloadProgress({
+      model_id: modelId,
+      status: "starting",
+      progress_pct: 0,
+      downloaded_bytes: 0,
+      total_bytes: null,
+      message: uiText.downloading
+    });
+    setStatusLine(uiText.downloading);
     try {
       const message = await invoke<string>("download_model", { modelId });
       const loadedSettings = await invoke<UserSettings>("get_settings");
@@ -829,17 +1038,16 @@ function MainApp() {
       });
       setTranscript(result.text);
       addHistoryItem(result.text, outputPath, result.model_path);
-      setTextView("source");
-      const selectedModel = settings.model_path.replaceAll("\\", "/").toLowerCase();
-      const usedModel = result.model_path.replaceAll("\\", "/").toLowerCase();
-      if (selectedModel && usedModel && selectedModel !== usedModel) {
-        setErrorLine(
-          `${uiText.warningSelectedModelMismatchPrefix} (${modelLabelFromPath(settings.model_path)}) ${uiText.warningSelectedModelMismatchConnector} (${modelLabelFromPath(result.model_path)}).`
-        );
+      if (translationTarget !== "none") {
+        setTranslatedText("");
+        setTextView("translated");
+      } else {
+        setTextView("source");
       }
+      await updateModelMismatchWarning(result.model_path);
 
       if (translationTarget !== "none") {
-        await translateTextIfNeeded(result.text, settings.language);
+        void translateTextIfNeeded(result.text, settings.language, outputPath);
       } else {
         setStatusLine(result.text ? `${uiText.statusTranscriptionDone} (${modelLabelFromPath(result.model_path)})` : uiText.statusNoSpeechDetected);
       }
@@ -852,7 +1060,7 @@ function MainApp() {
     }
   };
 
-  const currentVisibleText = textView === "translated" && translationTarget !== "none" ? translatedText : transcript;
+  const currentVisibleText = textView === "translated" ? translatedText : transcript;
 
   const copyVisibleText = async () => {
     if (!currentVisibleText.trim()) return;
@@ -917,6 +1125,27 @@ function MainApp() {
       await invoke("quit_application");
     } catch (e) {
       setErrorLine(`${uiText.errorQuitAppPrefix}: ${String(e)}`);
+    }
+  };
+
+  const previewWidgetSound = async () => {
+    const selected = (settings.widget_pop_sound || DEFAULT_WIDGET_POP_SOUND).trim() || DEFAULT_WIDGET_POP_SOUND;
+    try {
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause();
+        previewAudioRef.current.currentTime = 0;
+      }
+      const audio = new Audio(`/sounds/${selected}`);
+      audio.preload = "auto";
+      audio.volume = clamp01(settings.widget_pop_sound_volume * getWidgetSoundGain(selected));
+      previewAudioRef.current = audio;
+      setPreviewSoundPlaying(true);
+      audio.onended = () => setPreviewSoundPlaying(false);
+      audio.onerror = () => setPreviewSoundPlaying(false);
+      await audio.play();
+    } catch {
+      setPreviewSoundPlaying(false);
+      setStatusLine(uiText.previewSoundError);
     }
   };
 
@@ -1025,12 +1254,18 @@ function MainApp() {
                   onChange={(e) => {
                     const next = e.target.value;
                     setTranslationTarget(next);
+                    const nextSettings = { ...settings, translation_target: next };
+                    setSettings(nextSettings);
+                    setSavedSettings((prev) => ({ ...prev, translation_target: next }));
+                    void invoke("save_settings", { settings: nextSettings }).catch(() => {
+                      // keep UI responsive even if persistence fails
+                    });
                     if (next === "none") {
                       setTranslatedText("");
                       setTranslationError("");
                       setTextView("source");
                     } else if (transcript.trim()) {
-                      void translateTextIfNeeded(transcript, settings.language);
+                      void translateTextIfNeeded(transcript, settings.language, wavPath);
                     }
                   }}
                 >
@@ -1068,7 +1303,7 @@ function MainApp() {
                     </button>
                   </>
                 ) : null}
-                <button type="button" onClick={copyVisibleText} disabled={!currentVisibleText || disabled}>
+                <button type="button" onClick={copyVisibleText} disabled={!currentVisibleText || disabled || translating}>
                   {uiText.copy}
                 </button>
               </div>
@@ -1323,6 +1558,35 @@ function MainApp() {
 
               <label className="field">
                 <span>
+                  {uiText.widgetPopSound}
+                  <button
+                    type="button"
+                    className="info-dot"
+                    title={uiText.tipWidgetPopSound}
+                    aria-label={uiText.ariaHelpWidgetPopSound}
+                  >
+                    ?
+                  </button>
+                </span>
+                <select
+                  value={settings.widget_pop_sound}
+                  onChange={(e) => setSettings((s) => ({ ...s, widget_pop_sound: e.target.value }))}
+                >
+                  {widgetSoundOptions.map((soundFile) => (
+                    <option key={soundFile} value={soundFile}>
+                      {widgetSoundLabel(soundFile)}
+                    </option>
+                  ))}
+                </select>
+                <div className="inline-actions">
+                  <button type="button" className="ghost" onClick={() => void previewWidgetSound()} disabled={previewSoundPlaying}>
+                    {previewSoundPlaying ? uiText.previewingSound : uiText.previewSound}
+                  </button>
+                </div>
+              </label>
+
+              <label className="field">
+                <span>
                   {uiText.widgetOpacity} ({Math.round(settings.widget_opacity * 100)}%)
                   <button
                     type="button"
@@ -1342,6 +1606,29 @@ function MainApp() {
                   onChange={(e) => setSettings((s) => ({ ...s, widget_opacity: Number(e.target.value) }))}
                 />
                 <p className="meta">{uiText.widgetOpacityHint}</p>
+              </label>
+
+              <label className="field">
+                <span>
+                  {uiText.widgetPopSoundVolume} ({Math.round(settings.widget_pop_sound_volume * 100)}%)
+                  <button
+                    type="button"
+                    className="info-dot"
+                    title={uiText.tipWidgetPopSoundVolume}
+                    aria-label={uiText.ariaHelpWidgetPopSoundVolume}
+                  >
+                    ?
+                  </button>
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={settings.widget_pop_sound_volume}
+                  onChange={(e) => setSettings((s) => ({ ...s, widget_pop_sound_volume: Number(e.target.value) }))}
+                />
+                <p className="meta">{uiText.widgetPopSoundVolumeHint}</p>
               </label>
             </section>
 
