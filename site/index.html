@@ -1,114 +1,140 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>WhisperPro - Dictee vocale locale pour Windows</title>
+    <title>WhisperPro - Local voice dictation for Windows</title>
     <meta
       name="description"
-      content="WhisperPro: application Windows de dictee vocale locale. Rapide, claire, avec historique, modeles et traduction."
+      content="WhisperPro: local Windows voice dictation app with fast transcription, model management, translation and global shortcut."
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="bg-glow bg-glow-a" aria-hidden="true"></div>
-    <div class="bg-glow bg-glow-b" aria-hidden="true"></div>
+    <div class="bg fx-a" aria-hidden="true"></div>
+    <div class="bg fx-b" aria-hidden="true"></div>
 
-    <main class="page">
-      <header class="hero">
-        <p class="eyebrow">WhisperPro v1.0.0</p>
-        <h1>Dictee vocale locale, pensee pour les utilisateurs Windows</h1>
-        <p class="subtitle">
-          Lance, parle, valide. WhisperPro transforme ta voix en texte avec un flux simple, rapide et propre.
-          Pas de configuration technique compliquee.
+    <header class="topbar">
+      <div class="wrap topbar-inner">
+        <div class="brand">WhisperPro</div>
+        <nav class="nav">
+          <a href="#features">Features</a>
+          <a href="#workflow">How it works</a>
+          <a href="#faq">FAQ</a>
+          <a class="btn ghost small" href="https://github.com/skro10/WhisperPro">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <section class="hero">
+        <p class="tag">v1.0.0 - Windows</p>
+        <h1>Write 3x faster with your voice</h1>
+        <p class="lead">
+          WhisperPro turns speech into text in seconds, with a clear interface, in-app model control,
+          and optional translation.
         </p>
-        <div class="cta-row">
-          <a class="btn primary" href="https://github.com/skro10/WhisperPro/releases/latest">Telecharger l'installeur</a>
-          <a class="btn ghost" href="https://github.com/skro10/WhisperPro">Voir le projet GitHub</a>
+        <div class="cta">
+          <a class="btn primary" href="https://github.com/skro10/WhisperPro/releases/latest">Download installer</a>
+          <a class="btn ghost" href="https://github.com/skro10/WhisperPro/releases/latest">View release</a>
         </div>
-        <ul class="hero-meta">
-          <li>Windows 10/11</li>
-          <li>Traitement local</li>
-          <li>Interface FR/EN</li>
-        </ul>
-      </header>
+        <div class="stats">
+          <div class="stat"><strong>Local</strong><span>runs on your machine</span></div>
+          <div class="stat"><strong>Simple</strong><span>button or global shortcut workflow</span></div>
+          <div class="stat"><strong>Complete</strong><span>history, models, translation</span></div>
+        </div>
+      </section>
 
-      <section class="section">
-        <h2>Pourquoi WhisperPro</h2>
-        <div class="grid cards-3">
+      <section class="proof">
+        <article class="proof-card">
+          <h2>Built for real users</h2>
+          <p>
+            WhisperPro avoids technical overload and focuses on one thing: helping you dictate
+            quickly with a clean daily workflow.
+          </p>
+        </article>
+      </section>
+
+      <section id="features" class="section">
+        <h2>Features that matter</h2>
+        <div class="grid grid-3">
           <article class="card">
-            <h3>Simple au quotidien</h3>
-            <p>Un bouton principal, un raccourci global, et une interface lisible sans jargon technique.</p>
+            <h3>Instant dictation</h3>
+            <p>Start recording from one main button or a customizable global shortcut.</p>
           </article>
           <article class="card">
-            <h3>Local et controle</h3>
-            <p>Gestion des modeles dans l'app, historique clair, options bien segmentees.</p>
+            <h3>In-app model management</h3>
+            <p>Download, activate, and remove models directly from settings.</p>
           </article>
           <article class="card">
-            <h3>Pret a deployer</h3>
-            <p>Installeur Windows, release GitHub, page projet, et support utilisateur integre.</p>
+            <h3>Integrated translation</h3>
+            <p>Select a target language and inject translated text into your workflow.</p>
+          </article>
+          <article class="card">
+            <h3>Useful history</h3>
+            <p>Review, copy, and clean transcription history whenever needed.</p>
+          </article>
+          <article class="card">
+            <h3>Dynamic mini-widget</h3>
+            <p>Lightweight visual status with opacity and sound customization.</p>
+          </article>
+          <article class="card">
+            <h3>French / English UI</h3>
+            <p>Switch interface language depending on your context.</p>
           </article>
         </div>
       </section>
 
-      <section class="section feature-split">
-        <div class="card panel">
-          <h2>Fonctions principales</h2>
-          <ul class="feature-list">
-            <li>Transcription vocale locale rapide</li>
-            <li>Raccourci clavier global personnalisable</li>
-            <li>Historique des transcriptions (copie/suppression)</li>
-            <li>Telechargement et selection des modeles</li>
-            <li>Traduction optionnelle selon langue cible</li>
-            <li>Mini-widget discret et personnalisable</li>
-          </ul>
-        </div>
-        <aside class="card panel panel-accent">
-          <h2>Installer en 3 etapes</h2>
+      <section id="workflow" class="section split">
+        <article class="card panel">
+          <h2>How it works</h2>
           <ol class="steps">
-            <li>Telecharge la derniere release</li>
-            <li>Lance l'installeur .exe</li>
-            <li>Demarre WhisperPro et dicte</li>
+            <li>Launch WhisperPro</li>
+            <li>Select your active model</li>
+            <li>Speak using button or shortcut</li>
+            <li>Get transcription (and translation if enabled)</li>
+            <li>Use the final text instantly</li>
           </ol>
-          <a class="btn primary full" href="https://github.com/skro10/WhisperPro/releases/latest">Installer WhisperPro</a>
+        </article>
+        <aside class="card panel panel-accent">
+          <h2>Install in 2 minutes</h2>
+          <p>Download the latest release and run the Windows installer.</p>
+          <a class="btn primary full" href="https://github.com/skro10/WhisperPro/releases/latest">Install WhisperPro</a>
         </aside>
       </section>
 
-      <section class="section">
-        <h2>FAQ rapide</h2>
-        <div class="grid cards-2">
+      <section id="faq" class="section">
+        <h2>FAQ</h2>
+        <div class="grid grid-2">
           <article class="card">
-            <h3>Est-ce que c'est gratuit ?</h3>
-            <p>Oui. L'application est distribuée gratuitement via GitHub Releases.</p>
+            <h3>Is WhisperPro free?</h3>
+            <p>Yes. You can download and use it for free.</p>
           </article>
           <article class="card">
-            <h3>Ou sont les modeles ?</h3>
-            <p>Tu peux les telecharger et les gerer directement dans les options de l'application.</p>
+            <h3>Are models bundled?</h3>
+            <p>Models are managed inside the app so users can choose quality and size.</p>
           </article>
           <article class="card">
-            <h3>Est-ce que je peux aider le projet ?</h3>
-            <p>Oui. Tu peux soutenir le developpement via Buy Me a Coffee.</p>
+            <h3>Where do I report bugs?</h3>
+            <p>Use GitHub Issues with clear reproduction steps and context.</p>
           </article>
           <article class="card">
-            <h3>Ou signaler un bug ?</h3>
-            <p>Sur les issues GitHub du projet avec ton contexte et les etapes de reproduction.</p>
+            <h3>Can I support the project?</h3>
+            <p>Yes, through Buy Me a Coffee.</p>
           </article>
         </div>
       </section>
 
-      <section class="support card">
-        <h2>Soutenir WhisperPro</h2>
-        <p>Si l'app t'aide au quotidien, ton soutien accelere les prochaines versions.</p>
-        <div class="cta-row">
-          <a class="btn primary" href="https://buymeacoffee.com/skroproduction">Buy Me a Coffee</a>
+      <section class="section final-cta">
+        <div class="card cta-block">
+          <h2>Ready to save time every day?</h2>
+          <p>Install WhisperPro and start dictating now.</p>
+          <div class="cta">
+            <a class="btn primary" href="https://github.com/skro10/WhisperPro/releases/latest">Download installer</a>
+            <a class="btn ghost" href="https://buymeacoffee.com/skroproduction">Support the project</a>
+          </div>
         </div>
       </section>
-
-      <footer class="footer">
-        <a href="https://github.com/skro10/WhisperPro">Code source</a>
-        <a href="https://github.com/skro10/WhisperPro/releases/latest">Derniere release</a>
-        <a href="https://skro10.github.io/WhisperPro/">Site officiel</a>
-      </footer>
     </main>
   </body>
 </html>

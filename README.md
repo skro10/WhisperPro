@@ -1,62 +1,58 @@
 # WhisperPro
 
-WhisperPro est une application Windows de dictee vocale locale basee sur Whisper, orientee utilisateur final.
+WhisperPro is a Windows desktop app for fast, local voice dictation designed for everyday users.
 
-[Site officiel](https://skro10.github.io/WhisperPro/) | [Telecharger l'installeur](https://github.com/skro10/WhisperPro/releases/latest) | [Support](https://buymeacoffee.com/skroproduction)
+[Download installer](https://github.com/skro10/WhisperPro/releases/latest) | [Official website](https://skro10.github.io/WhisperPro/) | [Support the project](https://buymeacoffee.com/skroproduction)
 
-## Ce que fait WhisperPro
+## Product overview
 
-- dictee locale rapide via bouton ou raccourci global
-- transcription avec gestion des modeles directement dans l'UI
-- historique des transcriptions (copie et suppression)
-- traduction optionnelle selon langue cible
-- mini-widget discret et personnalisable (apparition, opacite, son)
-- interface en francais et anglais
+WhisperPro helps you turn speech into text quickly with a clean, focused interface.
 
-## Pour qui
+Core experience:
+- press one button (or use a global shortcut)
+- speak naturally
+- get clean text in seconds
 
-WhisperPro est pense pour les personnes qui veulent dicter rapidement sans devoir configurer un environnement technique complexe.
+## Key features
 
-## Installation (utilisateur final)
+- local voice dictation with global shortcut
+- fast Whisper transcription
+- in-app model management (download, remove, select)
+- transcription history (copy, delete, clear)
+- optional translation to selected target language
+- dynamic mini-widget (opacity and sound controls)
+- French/English interface
 
-1. Ouvre la derniere release:
+## Why WhisperPro
+
+- **simple**: clear UX with no technical overload
+- **practical**: optimized daily workflow for writing faster
+- **local-first**: runs on your machine
+- **evolving**: strong base for future releases
+
+## Common use cases
+
+- writing emails and messages faster
+- meeting notes and quick capture
+- drafting content by voice
+- multilingual dictation with translation
+
+## Installation (end users)
+
+1. Open latest release:
    [https://github.com/skro10/WhisperPro/releases/latest](https://github.com/skro10/WhisperPro/releases/latest)
-2. Telecharge `WhisperPro_1.0.0_x64-setup.exe`
-3. Lance l'installeur puis ouvre l'application
+2. Download `WhisperPro_1.0.0_x64-setup.exe`
+3. Run the installer and launch the app
 
-## Build local (developpement)
+## Support
 
-Prerequis:
-- Node.js 20+
-- Rust stable (`cargo`)
-- Visual Studio Build Tools (C++ workload)
-- WebView2 Runtime
+- bug report or feature request: [GitHub Issues](https://github.com/skro10/WhisperPro/issues)
+- support the project: [Buy Me a Coffee](https://buymeacoffee.com/skroproduction)
 
-Commandes:
+## Developer quick start
 
 ```powershell
 cd apps/desktop
 npm install
 npm run tauri:dev
 ```
-
-Build installateur:
-
-```powershell
-cd apps/desktop
-npm run tauri:build
-```
-
-Sortie:
-- `target/release/bundle/nsis/WhisperPro_1.0.0_x64-setup.exe`
-
-## Distribution GitHub
-
-- release automatique via `.github/workflows/release.yml` sur tags `v*`
-- site GitHub Pages via `.github/workflows/pages.yml` depuis `site/`
-- lien de soutien via `.github/FUNDING.yml`
-
-## Notes
-
-- Les dependances runtime sont gerees automatiquement a l'installation / au premier lancement.
-- Les modeles Whisper ne sont pas bundles par defaut et se gerent depuis l'interface.
