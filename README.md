@@ -1,5 +1,11 @@
 # WhisperPro
 
+## Support
+
+If WhisperPro helps you, support future updates:
+
+## [Buy Me a Coffee - skroproduction](https://buymeacoffee.com/skroproduction)
+
 **Fast local voice dictation for Windows.**
 
 WhisperPro helps you speak naturally and get clean text in seconds, with a workflow designed for non-technical users.
@@ -22,6 +28,8 @@ WhisperPro helps you speak naturally and get clean text in seconds, with a workf
 - French and English interface
 - installer-based distribution via GitHub Releases
 
+<img width="1097" height="626" alt="Capture d&#39;écran 2026-03-08 193052" src="https://github.com/user-attachments/assets/e5616cec-caa4-49ca-af99-15a7e27f3fba" />
+
 ## Why users choose WhisperPro
 
 - **Simple UX**: clean interface, no technical overload
@@ -43,11 +51,7 @@ WhisperPro helps you speak naturally and get clean text in seconds, with a workf
 2. Download `WhisperPro_1.0.0_x64-setup.exe`
 3. Run the installer and launch WhisperPro
 
-## Support
-
-If WhisperPro helps you, support future updates:
-
-## [Buy Me a Coffee - skroproduction](https://buymeacoffee.com/skroproduction)
+<img width="1096" height="770" alt="Capture d&#39;écran 2026-03-08 192814" src="https://github.com/user-attachments/assets/ee95661f-c1e0-4b0d-8e36-46701d913e2e" />
 
 ## Developer quick start
 
