@@ -1,0 +1,30 @@
+[package]
+name = "whisperpro-desktop"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+whisperpro-core = { path = "../../../crates/core" }
+tauri = { version = "2", features = [] }
+
+cpal = "0.15"
+hound = "3"
+parking_lot = "0.12"
+rusqlite = { version = "0.32", features = ["bundled"] }
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "json"] }
+tracing-appender = "0.2"
+tauri-plugin-global-shortcut = "2"
+enigo = "0.2"
+arboard = "3"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "multipart"] }
+zip = "2.2.2"
+
+[features]
+default = []

@@ -1,0 +1,18 @@
+[workspace]
+members = [
+  "crates/core",
+  "apps/desktop/src-tauri"
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "Proprietary"
+version = "0.1.0"
+authors = ["WhisperPro Team"]
+
+[workspace.dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"

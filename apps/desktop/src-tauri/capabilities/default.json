@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/capabilities.json",
+  "identifier": "default",
+  "description": "Permissions for WhisperPro main and overlay windows",
+  "windows": ["main", "overlay"],
+  "permissions": [
+    "core:default"
+  ]
+}
