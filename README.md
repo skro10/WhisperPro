@@ -1,38 +1,38 @@
 # WhisperPro
 
-WhisperPro is a Windows desktop app for local-first dictation and transcription with Whisper.
+WhisperPro est une application Windows de dictee vocale locale basee sur Whisper, orientee utilisateur final.
 
-[Project website](https://skro10.github.io/WhisperPro/) | [Latest installer](https://github.com/skro10/WhisperPro/releases/latest)
+[Site officiel](https://skro10.github.io/WhisperPro/) | [Telecharger l'installeur](https://github.com/skro10/WhisperPro/releases/latest) | [Support](https://buymeacoffee.com/skroproduction)
 
-## Current release
+## Ce que fait WhisperPro
 
-- Version: `1.0.0`
-- Distribution target: NSIS installer (`.exe`) only
-- Portable packaging is not part of the release workflow anymore
+- dictee locale rapide via bouton ou raccourci global
+- transcription avec gestion des modeles directement dans l'UI
+- historique des transcriptions (copie et suppression)
+- traduction optionnelle selon langue cible
+- mini-widget discret et personnalisable (apparition, opacite, son)
+- interface en francais et anglais
 
-## Main features
+## Pour qui
 
-- one-click dictation flow (button + global shortcut)
-- model download/manage/select directly in UI
-- transcription history
-- optional translation
-- dynamic mini-widget with selectable pop sound and volume
-- French/English UI language
+WhisperPro est pense pour les personnes qui veulent dicter rapidement sans devoir configurer un environnement technique complexe.
 
-## Project structure
+## Installation (utilisateur final)
 
-- `apps/desktop`: React UI + Tauri desktop app
-- `apps/desktop/src-tauri`: Rust backend commands/runtime orchestration
-- `crates/core`: shared Rust crate(s)
+1. Ouvre la derniere release:
+   [https://github.com/skro10/WhisperPro/releases/latest](https://github.com/skro10/WhisperPro/releases/latest)
+2. Telecharge `WhisperPro_1.0.0_x64-setup.exe`
+3. Lance l'installeur puis ouvre l'application
 
-## Development prerequisites
+## Build local (developpement)
 
+Prerequis:
 - Node.js 20+
 - Rust stable (`cargo`)
 - Visual Studio Build Tools (C++ workload)
 - WebView2 Runtime
 
-## Run in development
+Commandes:
 
 ```powershell
 cd apps/desktop
@@ -40,23 +40,23 @@ npm install
 npm run tauri:dev
 ```
 
-## Build installer
+Build installateur:
 
 ```powershell
 cd apps/desktop
 npm run tauri:build
 ```
 
-Installer output:
+Sortie:
 - `target/release/bundle/nsis/WhisperPro_1.0.0_x64-setup.exe`
 
-## GitHub distribution (free)
+## Distribution GitHub
 
-- GitHub Releases are automated by `.github/workflows/release.yml` on tag push (`v*`).
-- Project page is deployed with GitHub Pages from `site/` via `.github/workflows/pages.yml`.
-- Financial support links are configured in `.github/FUNDING.yml`.
+- release automatique via `.github/workflows/release.yml` sur tags `v*`
+- site GitHub Pages via `.github/workflows/pages.yml` depuis `site/`
+- lien de soutien via `.github/FUNDING.yml`
 
-## Runtime dependencies and models
+## Notes
 
-- Runtime dependencies are handled automatically by the installer/startup checks.
-- Whisper language models are not bundled by default and are managed from the app UI.
+- Les dependances runtime sont gerees automatiquement a l'installation / au premier lancement.
+- Les modeles Whisper ne sont pas bundles par defaut et se gerent depuis l'interface.
