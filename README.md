@@ -52,11 +52,3 @@ WhisperPro helps you speak naturally and get clean text in seconds, with a workf
 3. Run the installer and launch WhisperPro
 
 <img width="444" height="272" alt="Capture d&#39;écran 2026-03-08 192936" src="https://github.com/user-attachments/assets/6d91cd93-5294-4732-b207-c5a28a4689d7" />
-
-## Developer quick start
-
-```powershell
-cd apps/desktop
-npm install
-npm run tauri:dev
-```
