@@ -58,12 +58,25 @@ fn start_capture_impl(app_state: &AppState) -> Result<String, String> {
     if guard.is_some() {
         return Err("Capture deja en cours".to_string());
     }
+    let settings = get_settings_from_db(
+        &app_state.db_path,
+        &app_state.model_default_path,
+        &app_state.whisper_cli_default_path,
+    )?;
 
     let output_path = std::env::temp_dir().join("whisperpro_recording.wav");
     let (stop_tx, stop_rx) = mpsc::channel::<()>();
     let output_path_for_thread = output_path.clone();
+    let preferred_input_device_id = settings.input_device_id.trim().to_string();
 
-    let worker = thread::spawn(move || run_capture_loop(output_path_for_thread, stop_rx));
+    let worker = thread::spawn(move || {
+        let preferred = if preferred_input_device_id.is_empty() {
+            None
+        } else {
+            Some(preferred_input_device_id)
+        };
+        run_capture_loop(output_path_for_thread, stop_rx, preferred)
+    });
 
     *guard = Some(CaptureSession {
         stop_tx,
@@ -116,7 +129,7 @@ fn transcribe_wav_impl(app_state: &AppState, wav_path: &str) -> Result<Transcrip
         return Err(err_wav_missing(&wav));
     }
 
-    if is_probably_silent_wav(&wav)? {
+    if settings.silence_gate_enabled && is_probably_silent_wav(&wav)? {
         return Ok(TranscriptionResult {
             text: String::new(),
             segments: vec![],
@@ -156,6 +169,19 @@ fn transcribe_wav_impl(app_state: &AppState, wav_path: &str) -> Result<Transcrip
     Ok(result)
 }
 
+fn ensure_dictation_model_ready(app_state: &AppState) -> Result<(), String> {
+    let settings = get_settings_from_db(
+        &app_state.db_path,
+        &app_state.model_default_path,
+        &app_state.whisper_cli_default_path,
+    )?;
+    let model_path = PathBuf::from(settings.model_path);
+    if !model_path.exists() {
+        return Err("Aucun modele actif. Ouvre Options > Modeles, telecharge un modele (Base recommande), puis active-le.".to_string());
+    }
+    Ok(())
+}
+
 fn toggle_dictation_cycle_impl(app: &AppHandle, app_state: &AppState) -> Result<String, String> {
     if app_state.dictation_busy.load(Ordering::SeqCst) {
         let message = "Traitement de dictee deja en cours".to_string();
@@ -164,6 +190,10 @@ fn toggle_dictation_cycle_impl(app: &AppHandle, app_state: &AppState) -> Result<
     }
 
     if !app_state.dictation_recording.load(Ordering::SeqCst) {
+        if let Err(message) = ensure_dictation_model_ready(app_state) {
+            emit_dictation_status(app, "error", &message);
+            return Ok(message);
+        }
         let _wav_path = start_capture_impl(app_state)?;
         app_state.dictation_recording.store(true, Ordering::SeqCst);
         let message = "Ecoute en cours...".to_string();
@@ -272,14 +302,47 @@ fn register_or_update_global_shortcut(
 
     app.global_shortcut()
         .on_shortcut(shortcut, move |app_handle, _hotkey, event: ShortcutEvent| {
-            if event.state != ShortcutState::Pressed {
-                return;
-            }
-
             let handle = app_handle.clone();
             thread::spawn(move || {
                 let state = handle.state::<AppState>();
-                if let Err(e) = toggle_dictation_cycle_impl(&handle, state.inner()) {
+                let app_state = state.inner();
+                let settings = match get_settings_from_db(
+                    &app_state.db_path,
+                    &app_state.model_default_path,
+                    &app_state.whisper_cli_default_path,
+                ) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        record_error(app_state, &e);
+                        return;
+                    }
+                };
+
+                let result = if settings.push_to_talk_hold {
+                    if event.state == ShortcutState::Pressed {
+                        if app_state.dictation_recording.load(Ordering::SeqCst)
+                            || app_state.dictation_busy.load(Ordering::SeqCst)
+                        {
+                            Ok("Dictee deja active".to_string())
+                        } else {
+                            toggle_dictation_cycle_impl(&handle, app_state)
+                        }
+                    } else if event.state == ShortcutState::Released {
+                        if app_state.dictation_recording.load(Ordering::SeqCst) {
+                            toggle_dictation_cycle_impl(&handle, app_state)
+                        } else {
+                            Ok("Dictee inactive".to_string())
+                        }
+                    } else {
+                        Ok("Evenement raccourci ignore".to_string())
+                    }
+                } else if event.state == ShortcutState::Pressed {
+                    toggle_dictation_cycle_impl(&handle, app_state)
+                } else {
+                    Ok("Evenement raccourci ignore".to_string())
+                };
+
+                if let Err(e) = result {
                     record_error(state.inner(), &e);
                 }
             });
@@ -506,6 +569,7 @@ fn main() {
             transcribe_wav,
             test_whisper_environment,
             get_settings,
+            list_input_devices,
             save_settings,
             save_widget_preferences,
             get_default_model_path,
@@ -527,6 +591,7 @@ fn main() {
             start_overlay_drag,
             clear_history_artifacts,
             open_path_in_explorer,
+            open_external_url,
             quit_application
         ])
         .run(tauri::generate_context!())

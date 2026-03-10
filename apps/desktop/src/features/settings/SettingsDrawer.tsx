@@ -33,6 +33,8 @@ export default function SettingsDrawer({
     shortcutDraft,
     capturingShortcut,
     runtimeSetupBusy,
+    inputDevices,
+    inputDevicesBusy,
     computeModeOptions,
     computeCapability,
     isDownloadInProgress,
@@ -53,6 +55,7 @@ export default function SettingsDrawer({
     onSaveSettingsSnapshot,
     onResetSettings,
     onRepairRuntime,
+    onRefreshInputDevices,
     onCancelModelDownload,
     onWidgetSoundChange,
     onWidgetThemeModeChange,
@@ -160,6 +163,48 @@ export default function SettingsDrawer({
 
               <label className="field">
                 <span>
+                  {uiText.inputDevice}
+                  <button
+                    type="button"
+                    className="info-dot"
+                    title={uiText.tipInputDevice}
+                    aria-label={uiText.ariaHelpInputDevice}
+                  >
+                    ?
+                  </button>
+                </span>
+                <div className="inline-actions">
+                  <select
+                    value={settings.input_device_id}
+                    onChange={(e) => setSettings((s) => ({ ...s, input_device_id: e.target.value }))}
+                    disabled={inputDevicesBusy}
+                  >
+                    <option value="">{uiText.inputDeviceDefault}</option>
+                    {inputDevices.map((device) => (
+                      <option key={device.id} value={device.id}>
+                        {device.name}
+                        {device.is_default ? ` (${uiText.inputDeviceDefault})` : ""}
+                      </option>
+                    ))}
+                    {settings.input_device_id && !inputDevices.some((d) => d.id === settings.input_device_id) ? (
+                      <option value={settings.input_device_id}>
+                        {uiText.inputDeviceUnavailable}
+                      </option>
+                    ) : null}
+                  </select>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={onRefreshInputDevices}
+                    disabled={inputDevicesBusy}
+                  >
+                    {uiText.refreshInputDevices}
+                  </button>
+                </div>
+              </label>
+
+              <label className="field">
+                <span>
                   {uiText.keyboardShortcut}
                   <button
                     type="button"
@@ -241,6 +286,63 @@ export default function SettingsDrawer({
                   type="checkbox"
                   checked={settings.voice_commands_enabled}
                   onChange={(e) => setSettings((s) => ({ ...s, voice_commands_enabled: e.target.checked }))}
+                />
+              </label>
+
+              <label className="field checkbox compact">
+                <span>
+                  {uiText.pushToTalkHold}
+                  <button
+                    type="button"
+                    className="info-dot"
+                    title={uiText.tipPushToTalkHold}
+                    aria-label={uiText.ariaHelpPushToTalkHold}
+                  >
+                    ?
+                  </button>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={settings.push_to_talk_hold}
+                  onChange={(e) => setSettings((s) => ({ ...s, push_to_talk_hold: e.target.checked }))}
+                />
+              </label>
+
+              <label className="field checkbox compact">
+                <span>
+                  {uiText.secureTextMode}
+                  <button
+                    type="button"
+                    className="info-dot"
+                    title={uiText.tipSecureTextMode}
+                    aria-label={uiText.ariaHelpSecureTextMode}
+                  >
+                    ?
+                  </button>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={settings.secure_text_mode}
+                  onChange={(e) => setSettings((s) => ({ ...s, secure_text_mode: e.target.checked }))}
+                />
+              </label>
+
+              <label className="field checkbox compact">
+                <span>
+                  {uiText.silenceGate}
+                  <button
+                    type="button"
+                    className="info-dot"
+                    title={uiText.tipSilenceGate}
+                    aria-label={uiText.ariaHelpSilenceGate}
+                  >
+                    ?
+                  </button>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={settings.silence_gate_enabled}
+                  onChange={(e) => setSettings((s) => ({ ...s, silence_gate_enabled: e.target.checked }))}
                 />
               </label>
 

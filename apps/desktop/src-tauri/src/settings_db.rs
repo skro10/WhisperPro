@@ -19,7 +19,7 @@ pub(crate) fn get_settings_from_db(
     let fallback_whisper_cli_path = default_whisper_cli_path.to_string_lossy().to_string();
 
     let mut stmt = conn
-        .prepare("SELECT language, translation_target, shortcut, model_path, whisper_cli_path, compute_mode, keep_model_loaded, widget_enabled, widget_autohide, voice_commands_enabled, onboarding_completed, widget_opacity, widget_pop_sound_volume, widget_pop_sound FROM settings WHERE id = 1")
+        .prepare("SELECT language, translation_target, shortcut, model_path, whisper_cli_path, input_device_id, push_to_talk_hold, secure_text_mode, silence_gate_enabled, compute_mode, keep_model_loaded, widget_enabled, widget_autohide, voice_commands_enabled, onboarding_completed, widget_opacity, widget_pop_sound_volume, widget_pop_sound FROM settings WHERE id = 1")
         .map_err(|e| format!("Lecture settings impossible: {e}"))?;
 
     let mut rows = stmt
@@ -36,32 +36,44 @@ pub(crate) fn get_settings_from_db(
         let whisper_cli_from_db: String = row
             .get::<_, String>(4)
             .map_err(|e| format!("Lecture whisper_cli_path impossible: {e}"))?;
-        let compute_mode_from_db: String = row
+        let input_device_id_from_db: String = row
             .get::<_, String>(5)
+            .map_err(|e| format!("Lecture input_device_id impossible: {e}"))?;
+        let push_to_talk_hold: i64 = row
+            .get::<_, i64>(6)
+            .map_err(|e| format!("Lecture push_to_talk_hold impossible: {e}"))?;
+        let secure_text_mode: i64 = row
+            .get::<_, i64>(7)
+            .map_err(|e| format!("Lecture secure_text_mode impossible: {e}"))?;
+        let silence_gate_enabled: i64 = row
+            .get::<_, i64>(8)
+            .map_err(|e| format!("Lecture silence_gate_enabled impossible: {e}"))?;
+        let compute_mode_from_db: String = row
+            .get::<_, String>(9)
             .map_err(|e| format!("Lecture compute_mode impossible: {e}"))?;
         let keep_model_loaded: i64 = row
-            .get::<_, i64>(6)
+            .get::<_, i64>(10)
             .map_err(|e| format!("Lecture keep_model_loaded impossible: {e}"))?;
         let widget_enabled: i64 = row
-            .get::<_, i64>(7)
+            .get::<_, i64>(11)
             .map_err(|e| format!("Lecture widget_enabled impossible: {e}"))?;
         let widget_autohide: i64 = row
-            .get::<_, i64>(8)
+            .get::<_, i64>(12)
             .map_err(|e| format!("Lecture widget_autohide impossible: {e}"))?;
         let voice_commands_enabled: i64 = row
-            .get::<_, i64>(9)
+            .get::<_, i64>(13)
             .map_err(|e| format!("Lecture voice_commands_enabled impossible: {e}"))?;
         let onboarding_completed: i64 = row
-            .get::<_, i64>(10)
+            .get::<_, i64>(14)
             .map_err(|e| format!("Lecture onboarding_completed impossible: {e}"))?;
         let widget_opacity: f64 = row
-            .get::<_, f64>(11)
+            .get::<_, f64>(15)
             .map_err(|e| format!("Lecture widget_opacity impossible: {e}"))?;
         let widget_pop_sound_volume: f64 = row
-            .get::<_, f64>(12)
+            .get::<_, f64>(16)
             .map_err(|e| format!("Lecture widget_pop_sound_volume impossible: {e}"))?;
         let widget_pop_sound: String = row
-            .get::<_, String>(13)
+            .get::<_, String>(17)
             .map_err(|e| format!("Lecture widget_pop_sound impossible: {e}"))?;
 
         let selected_model_path = resolve_active_model_path(&model_path_from_db, &fallback_model_path);
@@ -84,6 +96,10 @@ pub(crate) fn get_settings_from_db(
                 .map_err(|e| format!("Lecture shortcut impossible: {e}"))?,
             model_path: selected_model_path.clone(),
             whisper_cli_path: selected_cli_path.clone(),
+            input_device_id: input_device_id_from_db,
+            push_to_talk_hold: push_to_talk_hold != 0,
+            secure_text_mode: secure_text_mode != 0,
+            silence_gate_enabled: silence_gate_enabled != 0,
             compute_mode: super::normalize_compute_mode(&compute_mode_from_db),
             keep_model_loaded: keep_model_loaded != 0,
             widget_enabled: widget_enabled != 0,
@@ -110,14 +126,18 @@ pub(crate) fn get_settings_from_db(
 
 pub(crate) fn save_settings_impl(conn: &Connection, settings: &UserSettings) -> Result<(), String> {
     conn.execute(
-        "INSERT INTO settings (id, language, translation_target, shortcut, model_path, whisper_cli_path, compute_mode, keep_model_loaded, widget_enabled, widget_autohide, voice_commands_enabled, onboarding_completed, widget_opacity, widget_pop_sound_volume, widget_pop_sound) VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
-         ON CONFLICT(id) DO UPDATE SET language = excluded.language, translation_target = excluded.translation_target, shortcut = excluded.shortcut, model_path = excluded.model_path, whisper_cli_path = excluded.whisper_cli_path, compute_mode = excluded.compute_mode, keep_model_loaded = excluded.keep_model_loaded, widget_enabled = excluded.widget_enabled, widget_autohide = excluded.widget_autohide, voice_commands_enabled = excluded.voice_commands_enabled, onboarding_completed = excluded.onboarding_completed, widget_opacity = excluded.widget_opacity, widget_pop_sound_volume = excluded.widget_pop_sound_volume, widget_pop_sound = excluded.widget_pop_sound",
+        "INSERT INTO settings (id, language, translation_target, shortcut, model_path, whisper_cli_path, input_device_id, push_to_talk_hold, secure_text_mode, silence_gate_enabled, compute_mode, keep_model_loaded, widget_enabled, widget_autohide, voice_commands_enabled, onboarding_completed, widget_opacity, widget_pop_sound_volume, widget_pop_sound) VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+         ON CONFLICT(id) DO UPDATE SET language = excluded.language, translation_target = excluded.translation_target, shortcut = excluded.shortcut, model_path = excluded.model_path, whisper_cli_path = excluded.whisper_cli_path, input_device_id = excluded.input_device_id, push_to_talk_hold = excluded.push_to_talk_hold, secure_text_mode = excluded.secure_text_mode, silence_gate_enabled = excluded.silence_gate_enabled, compute_mode = excluded.compute_mode, keep_model_loaded = excluded.keep_model_loaded, widget_enabled = excluded.widget_enabled, widget_autohide = excluded.widget_autohide, voice_commands_enabled = excluded.voice_commands_enabled, onboarding_completed = excluded.onboarding_completed, widget_opacity = excluded.widget_opacity, widget_pop_sound_volume = excluded.widget_pop_sound_volume, widget_pop_sound = excluded.widget_pop_sound",
         params![
             settings.language,
             super::normalize_translation_target(&settings.translation_target),
             settings.shortcut,
             settings.model_path,
             settings.whisper_cli_path,
+            settings.input_device_id,
+            if settings.push_to_talk_hold { 1 } else { 0 },
+            if settings.secure_text_mode { 1 } else { 0 },
+            if settings.silence_gate_enabled { 1 } else { 0 },
             super::normalize_compute_mode(&settings.compute_mode),
             if settings.keep_model_loaded { 1 } else { 0 },
             if settings.widget_enabled { 1 } else { 0 },
@@ -152,6 +172,10 @@ pub(crate) fn init_db(
 
     let _ = conn.execute("ALTER TABLE settings ADD COLUMN model_path TEXT NOT NULL DEFAULT ''", []);
     let _ = conn.execute("ALTER TABLE settings ADD COLUMN whisper_cli_path TEXT NOT NULL DEFAULT ''", []);
+    let _ = conn.execute("ALTER TABLE settings ADD COLUMN input_device_id TEXT NOT NULL DEFAULT ''", []);
+    let _ = conn.execute("ALTER TABLE settings ADD COLUMN push_to_talk_hold INTEGER NOT NULL DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE settings ADD COLUMN secure_text_mode INTEGER NOT NULL DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE settings ADD COLUMN silence_gate_enabled INTEGER NOT NULL DEFAULT 1", []);
     let _ = conn.execute("ALTER TABLE settings ADD COLUMN translation_target TEXT NOT NULL DEFAULT 'none'", []);
     let _ = conn.execute("ALTER TABLE settings ADD COLUMN compute_mode TEXT NOT NULL DEFAULT 'auto'", []);
     let _ = conn.execute("ALTER TABLE settings ADD COLUMN keep_model_loaded INTEGER NOT NULL DEFAULT 0", []);

@@ -4,6 +4,10 @@ export type UserSettings = {
   shortcut: string;
   model_path: string;
   whisper_cli_path: string;
+  input_device_id: string;
+  push_to_talk_hold: boolean;
+  secure_text_mode: boolean;
+  silence_gate_enabled: boolean;
   compute_mode: "auto" | "cpu" | "gpu";
   keep_model_loaded: boolean;
   widget_enabled: boolean;
@@ -13,6 +17,12 @@ export type UserSettings = {
   widget_pop_sound: string;
   voice_commands_enabled: boolean;
   onboarding_completed: boolean;
+};
+
+export type InputDeviceInfo = {
+  id: string;
+  name: string;
+  is_default: boolean;
 };
 
 export type TranscriptionResult = {

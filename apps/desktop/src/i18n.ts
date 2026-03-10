@@ -25,12 +25,18 @@ type UiText = {
   uiThemeDark: string;
   uiThemeSwitchToLight: string;
   uiThemeSwitchToDark: string;
+  micLevelLabel: string;
+  updateAvailable: string;
+  openReleasePage: string;
+  pushToTalkToggle: string;
   options: string;
   quit: string;
   startSpeaking: string;
   stopAndTranscribe: string;
   activeModel: string;
   noModelInstalled: string;
+  noModelRequiredHint: string;
+  statusNoModelReady: string;
   model: string;
   shortcut: string;
   translation: string;
@@ -61,6 +67,10 @@ type UiText = {
   sectionAdvanced: string;
   language: string;
   customLanguage: string;
+  inputDevice: string;
+  inputDeviceDefault: string;
+  refreshInputDevices: string;
+  inputDeviceUnavailable: string;
   computeMode: string;
   gpuDetected: string;
   gpuNotDetected: string;
@@ -71,6 +81,9 @@ type UiText = {
   cancelCapture: string;
   detectHint: string;
   voicePunctuation: string;
+  pushToTalkHold: string;
+  secureTextMode: string;
+  silenceGate: string;
   showWidget: string;
   widgetTheme: string;
   widgetThemeFollowApp: string;
@@ -101,12 +114,14 @@ type UiText = {
   modelLabels: Record<string, string>;
   statusTranslationDone: string;
   statusTranscriptionDoneNoTranslation: string;
+  statusReady: string;
   statusConfigRequired: string;
   statusCaptureCancelled: string;
   statusShortcutDetectedPrefix: string;
   statusEngineChecked: string;
   statusEngineRepairFailed: string;
   statusRecordingInProgress: string;
+  statusListeningNow: string;
   statusRecordingStartFailed: string;
   statusTranscriptionInProgress: string;
   statusTranslationInProgress: string;
@@ -137,9 +152,13 @@ type UiText = {
   tipActiveModel: string;
   tipTranslation: string;
   tipRecognitionLanguage: string;
+  tipInputDevice: string;
   tipComputeMode: string;
   tipShortcut: string;
   tipVoicePunctuation: string;
+  tipPushToTalkHold: string;
+  tipSecureTextMode: string;
+  tipSilenceGate: string;
   tipWidget: string;
   tipWidgetTheme: string;
   tipWidgetPopSound: string;
@@ -152,9 +171,13 @@ type UiText = {
   ariaHelpActiveModel: string;
   ariaHelpTranslation: string;
   ariaHelpLanguage: string;
+  ariaHelpInputDevice: string;
   ariaHelpComputeMode: string;
   ariaHelpShortcut: string;
   ariaHelpPunctuation: string;
+  ariaHelpPushToTalkHold: string;
+  ariaHelpSecureTextMode: string;
+  ariaHelpSilenceGate: string;
   ariaHelpWidget: string;
   ariaHelpWidgetTheme: string;
   ariaHelpWidgetPopSound: string;
@@ -180,12 +203,18 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     uiThemeDark: "Sombre",
     uiThemeSwitchToLight: "Passer en th\u00E8me clair",
     uiThemeSwitchToDark: "Passer en th\u00E8me sombre",
+    micLevelLabel: "Niveau micro",
+    updateAvailable: "Mise \u00E0 jour disponible",
+    openReleasePage: "Ouvrir la page des releases",
+    pushToTalkToggle: "Maintenir pour parler",
     options: "Options",
     quit: "Quitter",
     startSpeaking: "Commencer \u00E0 parler",
     stopAndTranscribe: "Arr\u00EAter et transcrire",
     activeModel: "Mod\u00E8le actif",
     noModelInstalled: "Aucun mod\u00E8le install\u00E9",
+    noModelRequiredHint: "Installe et active un mod\u00E8le dans Options > Mod\u00E8les avant de transcrire.",
+    statusNoModelReady: "Aucun mod\u00E8le actif. Ouvre Options > Mod\u00E8les pour en installer un.",
     model: "Mod\u00E8le",
     shortcut: "Raccourci",
     translation: "Traduction",
@@ -216,6 +245,10 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     sectionAdvanced: "Avanc\u00E9",
     language: "Langue",
     customLanguage: "Personnalis\u00E9",
+    inputDevice: "Microphone d'entr\u00E9e",
+    inputDeviceDefault: "Par d\u00E9faut (syst\u00E8me)",
+    refreshInputDevices: "Actualiser les micros",
+    inputDeviceUnavailable: "Micro pr\u00E9c\u00E9dent indisponible",
     computeMode: "Mode de calcul",
     gpuDetected: "GPU d\u00E9tect\u00E9.",
     gpuNotDetected: "GPU non d\u00E9tect\u00E9 (build CPU).",
@@ -226,6 +259,9 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     cancelCapture: "Annuler capture",
     detectHint: 'Utilise "D\u00E9tecter touches" puis clique "Appliquer".',
     voicePunctuation: "Activer les commandes vocales de ponctuation",
+    pushToTalkHold: "Push-to-talk maintenu (appui = d\u00E9marrer, rel\u00E2chement = transcrire)",
+    secureTextMode: "Mode texte s\u00E9curis\u00E9 (pas d'historique local)",
+    silenceGate: "Activer la d\u00E9tection stricte du silence",
     showWidget: "Afficher le mini-widget",
     widgetTheme: "Th\u00E8me du widget",
     widgetThemeFollowApp: "Suivre le th\u00E8me app",
@@ -262,12 +298,14 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     },
     statusTranslationDone: "Transcription et traduction termin\u00E9es",
     statusTranscriptionDoneNoTranslation: "Transcription termin\u00E9e (traduction indisponible)",
+    statusReady: "Pr\u00EAt \u00E0 transcrire",
     statusConfigRequired: "Configuration requise dans Options",
     statusCaptureCancelled: "Capture raccourci annul\u00E9e",
     statusShortcutDetectedPrefix: "Raccourci d\u00E9tect\u00E9",
     statusEngineChecked: "Moteur Whisper v\u00E9rifi\u00E9",
     statusEngineRepairFailed: "R\u00E9paration du moteur impossible",
     statusRecordingInProgress: "Enregistrement en cours...",
+    statusListeningNow: "Micro actif. Parle maintenant.",
     statusRecordingStartFailed: "Impossible de d\u00E9marrer l'enregistrement",
     statusTranscriptionInProgress: "Transcription en cours...",
     statusTranslationInProgress: "Traduction en cours...",
@@ -298,9 +336,13 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     tipActiveModel: "Choisis ici le mod\u00E8le utilis\u00E9 pour les prochaines transcriptions.",
     tipTranslation: "Choisis une langue cible pour traduire automatiquement apr\u00E8s la transcription.",
     tipRecognitionLanguage: "Langue principale de reconnaissance vocale.",
+    tipInputDevice: "Choisis le micro utilis\u00E9 pour l'enregistrement. Si indisponible, WhisperPro bascule sur le micro par d\u00E9faut.",
     tipComputeMode: "Auto: tente GPU puis CPU. CPU: compatible partout. GPU: plus rapide si disponible.",
     tipShortcut: "Clique \"D\u00E9tecter touches\", fais ta combinaison, puis \"Appliquer\".",
     tipVoicePunctuation: "Transforme des mots comme \"virgule\", \"point\", \"point d\u2019interrogation\" en ponctuation.",
+    tipPushToTalkHold: "Avec le raccourci global: maintiens pour parler, rel\u00E2che pour transcrire.",
+    tipSecureTextMode: "Ne conserve aucune transcription dans l'historique local.",
+    tipSilenceGate: "Si d\u00E9sactiv\u00E9, WhisperPro essaie de transcrire m\u00EAme les entr\u00E9es tr\u00E8s faibles.",
     tipWidget: "Affiche le widget de statut pendant la dict\u00E9e.",
     tipWidgetTheme: "Choisis l'apparence du widget: suivre l'app, clair ou sombre.",
     tipWidgetPopSound: "Choisis le son jou\u00E9 quand le widget appara\u00EEt.",
@@ -313,9 +355,13 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     ariaHelpActiveModel: "Aide mod\u00E8le actif",
     ariaHelpTranslation: "Aide traduction",
     ariaHelpLanguage: "Aide langue",
+    ariaHelpInputDevice: "Aide microphone d'entr\u00E9e",
     ariaHelpComputeMode: "Aide mode de calcul",
     ariaHelpShortcut: "Aide raccourci clavier",
     ariaHelpPunctuation: "Aide ponctuation vocale",
+    ariaHelpPushToTalkHold: "Aide push-to-talk maintenu",
+    ariaHelpSecureTextMode: "Aide mode texte s\u00E9curis\u00E9",
+    ariaHelpSilenceGate: "Aide d\u00E9tection silence",
     ariaHelpWidget: "Aide mini-widget",
     ariaHelpWidgetTheme: "Aide th\u00E8me widget",
     ariaHelpWidgetPopSound: "Aide son d'apparition widget",
@@ -384,12 +430,18 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     uiThemeDark: "Dark",
     uiThemeSwitchToLight: "Switch to light theme",
     uiThemeSwitchToDark: "Switch to dark theme",
+    micLevelLabel: "Mic level",
+    updateAvailable: "Update available",
+    openReleasePage: "Open releases page",
+    pushToTalkToggle: "Hold-to-talk",
     options: "Options",
     quit: "Quit",
     startSpeaking: "Start speaking",
     stopAndTranscribe: "Stop and transcribe",
     activeModel: "Active model",
     noModelInstalled: "No installed model",
+    noModelRequiredHint: "Install and activate a model in Options > Models before transcribing.",
+    statusNoModelReady: "No active model. Open Options > Models to install one.",
     model: "Model",
     shortcut: "Shortcut",
     translation: "Translation",
@@ -420,6 +472,10 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     sectionAdvanced: "Advanced",
     language: "Language",
     customLanguage: "Custom",
+    inputDevice: "Input microphone",
+    inputDeviceDefault: "Default (system)",
+    refreshInputDevices: "Refresh microphones",
+    inputDeviceUnavailable: "Previously selected microphone unavailable",
     computeMode: "Compute mode",
     gpuDetected: "GPU detected.",
     gpuNotDetected: "GPU not detected (CPU build).",
@@ -430,6 +486,9 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     cancelCapture: "Cancel capture",
     detectHint: 'Use "Detect keys", then click "Apply".',
     voicePunctuation: "Enable punctuation voice commands",
+    pushToTalkHold: "Hold push-to-talk (press = start, release = transcribe)",
+    secureTextMode: "Secure text mode (no local history)",
+    silenceGate: "Enable strict silence detection",
     showWidget: "Show mini-widget",
     widgetTheme: "Widget theme",
     widgetThemeFollowApp: "Follow app theme",
@@ -466,12 +525,14 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     },
     statusTranslationDone: "Transcription and translation completed",
     statusTranscriptionDoneNoTranslation: "Transcription completed (translation unavailable)",
+    statusReady: "Ready to transcribe",
     statusConfigRequired: "Configuration required in Options",
     statusCaptureCancelled: "Shortcut capture canceled",
     statusShortcutDetectedPrefix: "Shortcut detected",
     statusEngineChecked: "Whisper runtime verified",
     statusEngineRepairFailed: "Runtime repair failed",
     statusRecordingInProgress: "Recording in progress...",
+    statusListeningNow: "Micro is active. Speak now.",
     statusRecordingStartFailed: "Unable to start recording",
     statusTranscriptionInProgress: "Transcription in progress...",
     statusTranslationInProgress: "Translation in progress...",
@@ -502,9 +563,13 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     tipActiveModel: "Choose the model used for upcoming transcriptions.",
     tipTranslation: "Choose a target language to automatically translate after transcription.",
     tipRecognitionLanguage: "Primary speech recognition language.",
+    tipInputDevice: "Choose which microphone is used for recording. If unavailable, WhisperPro falls back to the default microphone.",
     tipComputeMode: "Auto: tries GPU then CPU. CPU: widest compatibility. GPU: faster when available.",
     tipShortcut: "Click \"Detect keys\", press your combo, then click \"Apply\".",
     tipVoicePunctuation: "Turns words like \"comma\", \"period\" or \"question mark\" into punctuation.",
+    tipPushToTalkHold: "With global shortcut: hold to record, release to transcribe.",
+    tipSecureTextMode: "Keeps no transcription history on disk.",
+    tipSilenceGate: "If disabled, WhisperPro still tries to transcribe very low-level input.",
     tipWidget: "Shows the status mini-widget during dictation.",
     tipWidgetTheme: "Choose widget appearance: follow app, light, or dark.",
     tipWidgetPopSound: "Choose the sound played when the widget appears.",
@@ -517,9 +582,13 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     ariaHelpActiveModel: "Active model help",
     ariaHelpTranslation: "Translation help",
     ariaHelpLanguage: "Language help",
+    ariaHelpInputDevice: "Input microphone help",
     ariaHelpComputeMode: "Compute mode help",
     ariaHelpShortcut: "Shortcut help",
     ariaHelpPunctuation: "Punctuation help",
+    ariaHelpPushToTalkHold: "Push-to-talk hold help",
+    ariaHelpSecureTextMode: "Secure text mode help",
+    ariaHelpSilenceGate: "Silence detection help",
     ariaHelpWidget: "Widget help",
     ariaHelpWidgetTheme: "Widget theme help",
     ariaHelpWidgetPopSound: "Widget pop sound help",

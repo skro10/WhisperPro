@@ -15,6 +15,10 @@ pub(crate) struct UserSettings {
     pub(crate) shortcut: String,
     pub(crate) model_path: String,
     pub(crate) whisper_cli_path: String,
+    pub(crate) input_device_id: String,
+    pub(crate) push_to_talk_hold: bool,
+    pub(crate) secure_text_mode: bool,
+    pub(crate) silence_gate_enabled: bool,
     pub(crate) compute_mode: String,
     pub(crate) keep_model_loaded: bool,
     pub(crate) widget_enabled: bool,
@@ -34,6 +38,10 @@ impl UserSettings {
             shortcut: "Ctrl+Shift+Space".to_string(),
             model_path,
             whisper_cli_path,
+            input_device_id: String::new(),
+            push_to_talk_hold: false,
+            secure_text_mode: false,
+            silence_gate_enabled: true,
             compute_mode: "auto".to_string(),
             keep_model_loaded: false,
             widget_enabled: true,
@@ -45,6 +53,13 @@ impl UserSettings {
             onboarding_completed: false,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct InputDeviceInfo {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) is_default: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

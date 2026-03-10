@@ -5,6 +5,7 @@ import type { WidgetThemeMode } from "../../i18n";
 import type {
   ComputeCapabilityReport,
   HistoryItem,
+  InputDeviceInfo,
   ModelDownloadProgressEvent,
   ModelInfo,
   UserSettings
@@ -21,6 +22,7 @@ export type DictationPanelModel = {
   activeModelId: string;
   activeModelLabel: string;
   shortcut: string;
+  pushToTalkHold: boolean;
   translationTarget: string;
   translationOptions: Array<{ value: string; label: string }>;
   statusLine: string;
@@ -44,6 +46,8 @@ export type DictationPanelSetters = {
 export type DictationPanelHandlers = {
   onStartRecording: () => void;
   onStopRecordingAndTranscribe: () => void;
+  onOpenSettings: () => void;
+  onTogglePushToTalkHold: () => void;
   onActivateModel: (modelId: string) => void;
   onTranslationTargetChange: (next: string) => void;
   onShowOriginalText: () => void;
@@ -73,6 +77,8 @@ export type SettingsDrawerModel = {
   shortcutDraft: string;
   capturingShortcut: boolean;
   runtimeSetupBusy: boolean;
+  inputDevices: InputDeviceInfo[];
+  inputDevicesBusy: boolean;
   computeModeOptions: Array<{ value: UserSettings["compute_mode"]; label: string }>;
   computeCapability: ComputeCapabilityReport | null;
   isDownloadInProgress: boolean;
@@ -100,6 +106,7 @@ export type SettingsDrawerHandlers = {
   onSaveSettingsSnapshot: (next: UserSettings, successLabel?: string) => Promise<boolean>;
   onResetSettings: () => void;
   onRepairRuntime: () => void;
+  onRefreshInputDevices: () => void;
   onCancelModelDownload: () => void;
   onWidgetSoundChange: (soundFile: string) => void;
   onWidgetThemeModeChange: (mode: WidgetThemeMode) => void;

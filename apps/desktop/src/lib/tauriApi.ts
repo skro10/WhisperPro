@@ -33,6 +33,10 @@ export function getSettings<T>(): Promise<T> {
   return invoke<T>("get_settings");
 }
 
+export function listInputDevices<T>(): Promise<T> {
+  return invoke<T>("list_input_devices");
+}
+
 export function getDefaultModelPath(): Promise<string> {
   return invoke<string>("get_default_model_path");
 }
@@ -115,4 +119,8 @@ export async function clearHistoryArtifacts(wavPaths: string[]): Promise<string>
 
 export function quitApplication(): Promise<void> {
   return invoke<void>("quit_application");
+}
+
+export function openExternalUrl(url: string): Promise<void> {
+  return invoke<void>("open_external_url", { url });
 }

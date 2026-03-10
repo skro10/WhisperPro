@@ -9,6 +9,17 @@ import { UI_THEME_STORAGE_KEY, WIDGET_THEME_STORAGE_KEY } from "./i18n";
 
 function MainApp() {
   const c = useMainAppController();
+  const downloadPct = c.settings.model.downloadProgress?.progress_pct;
+  const hasDownloadPct = typeof downloadPct === "number" && Number.isFinite(downloadPct);
+  const downloadLabel = c.uiText.downloading;
+  const micLevelPct = Math.round(Math.max(0, Math.min(1, c.micLevel)) * 100);
+  const footerMessage = c.dictation.model.errorLine
+    ? c.dictation.model.errorLine
+    : c.settings.model.isDownloadInProgress
+      ? hasDownloadPct
+        ? `${downloadLabel} (${Math.round(downloadPct)}%)`
+        : downloadLabel
+      : c.dictation.model.statusLine;
 
   return (
     <main className="app v2">
@@ -16,6 +27,18 @@ function MainApp() {
         <div className="brand-block">
           <h1>WhisperPro</h1>
           <p className="brand-subtitle">{c.uiText.topbarSubtitle}</p>
+        </div>
+        <div className="topbar-center">
+          {c.updateReleaseUrl ? (
+            <button
+              type="button"
+              className="update-badge"
+              title={c.uiText.openReleasePage}
+              onClick={c.openReleasePage}
+            >
+              {c.uiText.updateAvailable}
+            </button>
+          ) : null}
         </div>
         <div className="top-actions">
           <button
@@ -61,6 +84,28 @@ function MainApp() {
 
         <HistoryPanel model={c.history.model} handlers={c.history.handlers} />
       </section>
+
+      <footer
+        className={`app-toolbar ${c.dictation.model.errorLine ? "is-error" : ""}`}
+        role="status"
+        aria-live="polite"
+      >
+        <p className={c.dictation.model.errorLine ? "error" : "status"}>
+          {footerMessage}
+        </p>
+        <div className="toolbar-right">
+          <div
+            className={`footer-meter ${c.micMeterActive ? "active" : ""}`}
+            aria-label={c.uiText.micLevelLabel}
+            title={c.uiText.micLevelLabel}
+          >
+            <div className="footer-meter-track" aria-hidden="true">
+              <span className="footer-meter-fill" style={{ width: `${c.micMeterActive ? micLevelPct : 0}%` }} />
+            </div>
+          </div>
+          {c.appVersion ? <span className="app-version">v{c.appVersion}</span> : null}
+        </div>
+      </footer>
 
       <SettingsDrawer model={c.settings.model} setters={c.settings.setters} handlers={c.settings.handlers} />
     </main>

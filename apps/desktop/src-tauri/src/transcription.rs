@@ -466,7 +466,7 @@ pub(crate) fn detect_compute_capability_for_cli(whisper_cli_path: &Path) -> Comp
 
 pub(crate) fn err_model_missing(model_path: &Path) -> String {
     format!(
-        "Modele introuvable.\nChemin: {}\nAction: Place un modele Whisper.cpp (.bin) a ce chemin ou mets a jour \"Chemin modele Whisper\" dans Settings.",
+        "Aucun modele Whisper actif.\nChemin actuel: {}\nAction: Ouvre Options > Modeles, telecharge un modele (Base recommande), puis active-le avant de transcrire.",
         model_path.to_string_lossy()
     )
 }

@@ -26,6 +26,11 @@ pub(crate) fn get_settings(state: State<'_, AppState>) -> Result<UserSettings, S
 }
 
 #[tauri::command]
+pub(crate) fn list_input_devices() -> Result<Vec<InputDeviceInfo>, String> {
+    crate::audio_capture::list_input_devices_impl()
+}
+
+#[tauri::command]
 pub(crate) fn save_settings(app: AppHandle, state: State<'_, AppState>, mut settings: UserSettings) -> Result<(), String> {
     let app_state = state.inner();
     with_error_log(app_state, || {
@@ -50,6 +55,10 @@ pub(crate) fn save_settings(app: AppHandle, state: State<'_, AppState>, mut sett
             shortcut = %settings.shortcut,
             model = %settings.model_path,
             whisper_cli = %settings.whisper_cli_path,
+            input_device_id = %settings.input_device_id,
+            push_to_talk_hold = settings.push_to_talk_hold,
+            secure_text_mode = settings.secure_text_mode,
+            silence_gate_enabled = settings.silence_gate_enabled,
             compute_mode = %settings.compute_mode,
             keep_model_loaded = settings.keep_model_loaded,
             widget_enabled = settings.widget_enabled,
@@ -180,7 +189,7 @@ pub(crate) fn transcribe_wav(
             return Err(err_wav_missing(&wav));
         }
 
-        if is_probably_silent_wav(&wav)? {
+        if settings.silence_gate_enabled && is_probably_silent_wav(&wav)? {
             return Ok(TranscriptionResult {
                 text: String::new(),
                 segments: vec![],
@@ -539,7 +548,7 @@ pub(crate) fn generate_diagnostic_snapshot(state: State<'_, AppState>) -> Result
         let snapshot_path = log_dir.join(format!("diagnostic-{stamp}.txt"));
 
         let content = format!(
-            "WhisperPro Diagnostic Snapshot\nDateEpochMs: {stamp}\n\nPaths\n- DB: {}\n- Log: {}\n- Model: {} ({})\n- whisper-cli: {} ({})\n\nSettings\n- language: {}\n- translation_target: {}\n- shortcut: {}\n- widget_enabled: {}\n- widget_autohide: {}\n- widget_opacity: {:.2}\n- widget_pop_sound_volume: {:.2}\n- widget_pop_sound: {}\n- voice_commands_enabled: {}\n- onboarding_completed: {}\n\nRuntime\n- dictation_state: {}\n- dictation_message: {}\n- dictation_recording: {}\n- dictation_busy: {}\n- last_error: {}\n",
+            "WhisperPro Diagnostic Snapshot\nDateEpochMs: {stamp}\n\nPaths\n- DB: {}\n- Log: {}\n- Model: {} ({})\n- whisper-cli: {} ({})\n\nSettings\n- language: {}\n- translation_target: {}\n- shortcut: {}\n- input_device_id: {}\n- push_to_talk_hold: {}\n- secure_text_mode: {}\n- silence_gate_enabled: {}\n- widget_enabled: {}\n- widget_autohide: {}\n- widget_opacity: {:.2}\n- widget_pop_sound_volume: {:.2}\n- widget_pop_sound: {}\n- voice_commands_enabled: {}\n- onboarding_completed: {}\n\nRuntime\n- dictation_state: {}\n- dictation_message: {}\n- dictation_recording: {}\n- dictation_busy: {}\n- last_error: {}\n",
             app_state.db_path.to_string_lossy(),
             app_state.log_path.to_string_lossy(),
             settings.model_path,
@@ -549,6 +558,10 @@ pub(crate) fn generate_diagnostic_snapshot(state: State<'_, AppState>) -> Result
             settings.language,
             settings.translation_target,
             settings.shortcut,
+            settings.input_device_id,
+            settings.push_to_talk_hold,
+            settings.secure_text_mode,
+            settings.silence_gate_enabled,
             settings.widget_enabled,
             settings.widget_autohide,
             settings.widget_opacity,
@@ -609,6 +622,36 @@ pub(crate) fn open_path_in_explorer(path: String) -> Result<(), String> {
         .arg(fallback)
         .spawn()
         .map_err(|e| format!("Ouverture dossier parent impossible: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) fn open_external_url(url: String) -> Result<(), String> {
+    let target = url.trim();
+    if target.is_empty() {
+        return Err("URL vide: impossible d'ouvrir la page.".to_string());
+    }
+
+    if !(target.starts_with("http://") || target.starts_with("https://")) {
+        return Err("URL invalide: seul http/https est accepte.".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer.exe")
+            .arg(target)
+            .spawn()
+            .map_err(|e| format!("Ouverture URL impossible: {e}"))?;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new("xdg-open")
+            .arg(target)
+            .spawn()
+            .map_err(|e| format!("Ouverture URL impossible: {e}"))?;
+    }
+
     Ok(())
 }
 

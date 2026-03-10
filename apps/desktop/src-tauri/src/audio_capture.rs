@@ -6,11 +6,76 @@ use std::time::Duration;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use parking_lot::Mutex;
 
-pub(crate) fn run_capture_loop(output_path: PathBuf, stop_rx: Receiver<()>) -> Result<String, String> {
+use crate::state::InputDeviceInfo;
+
+fn build_input_device_id(index: usize, name: &str) -> String {
+    format!("{index}::{name}")
+}
+
+pub(crate) fn list_input_devices_impl() -> Result<Vec<InputDeviceInfo>, String> {
     let host = cpal::default_host();
-    let device = host
+    let default_name = host
         .default_input_device()
-        .ok_or_else(|| "Aucun micro detecte".to_string())?;
+        .and_then(|device| device.name().ok());
+
+    let devices = host
+        .input_devices()
+        .map_err(|e| format!("Impossible de lire les micros: {e}"))?;
+
+    let mut output: Vec<InputDeviceInfo> = Vec::new();
+    let mut default_marked = false;
+    for (index, device) in devices.enumerate() {
+        let name = device
+            .name()
+            .unwrap_or_else(|_| format!("Microphone {index}"));
+        let is_default = !default_marked && default_name.as_deref() == Some(name.as_str());
+        if is_default {
+            default_marked = true;
+        }
+        output.push(InputDeviceInfo {
+            id: build_input_device_id(index, &name),
+            name,
+            is_default,
+        });
+    }
+    Ok(output)
+}
+
+fn resolve_input_device(
+    host: &cpal::Host,
+    preferred_device_id: Option<&str>,
+) -> Result<cpal::Device, String> {
+    let preferred = preferred_device_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    if let Some(preferred_id) = preferred {
+        let devices = host
+            .input_devices()
+            .map_err(|e| format!("Impossible de lire les micros: {e}"))?;
+        for (index, device) in devices.enumerate() {
+            let name = match device.name() {
+                Ok(value) => value,
+                Err(_) => format!("Microphone {index}"),
+            };
+            let current_id = build_input_device_id(index, &name);
+            if current_id == preferred_id {
+                return Ok(device);
+            }
+        }
+    }
+
+    host.default_input_device()
+        .ok_or_else(|| "Aucun micro detecte".to_string())
+}
+
+pub(crate) fn run_capture_loop(
+    output_path: PathBuf,
+    stop_rx: Receiver<()>,
+    preferred_device_id: Option<String>,
+) -> Result<String, String> {
+    let host = cpal::default_host();
+    let device = resolve_input_device(&host, preferred_device_id.as_deref())?;
 
     let config = device
         .default_input_config()
@@ -66,6 +131,7 @@ pub(crate) fn run_capture_loop(output_path: PathBuf, stop_rx: Receiver<()>) -> R
 
     Ok(output_path.to_string_lossy().to_string())
 }
+
 
 pub(crate) fn build_stream_f32(
     device: &cpal::Device,

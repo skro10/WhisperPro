@@ -24,10 +24,9 @@ export default function DictationPanel({
     activeModelId,
     activeModelLabel,
     shortcut,
+    pushToTalkHold,
     translationTarget,
     translationOptions,
-    statusLine,
-    errorLine,
     textView,
     translatedText,
     currentVisibleText,
@@ -41,6 +40,8 @@ export default function DictationPanel({
   const {
     onStartRecording,
     onStopRecordingAndTranscribe,
+    onOpenSettings,
+    onTogglePushToTalkHold,
     onActivateModel,
     onTranslationTargetChange,
     onShowOriginalText,
@@ -50,6 +51,15 @@ export default function DictationPanel({
 
   return (
     <section className="panel main-panel">
+      {installedModels.length === 0 ? (
+        <div className="settings-warning inline-actions" role="alert">
+          <span>{uiText.noModelRequiredHint}</span>
+          <button type="button" className="secondary" onClick={onOpenSettings}>
+            {uiText.options}
+          </button>
+        </div>
+      ) : null}
+
       <section className="hero-actions">
         <div className="cta-row controls-primary">
           {!recording ? (
@@ -96,6 +106,16 @@ export default function DictationPanel({
           <div className="chip-row">
             <div className="chip">{uiText.model}: {activeModelLabel}</div>
             <div className="chip">{uiText.shortcut}: {shortcut}</div>
+            <button
+              type="button"
+              className={`chip-toggle ${pushToTalkHold ? "active" : ""}`}
+              onClick={onTogglePushToTalkHold}
+              title={uiText.pushToTalkHold}
+              aria-pressed={pushToTalkHold}
+            >
+              <span className="chip-toggle-box" aria-hidden="true">{pushToTalkHold ? "✓" : ""}</span>
+              <span>{uiText.pushToTalkToggle}</span>
+            </button>
           </div>
           <label className="translation-select">
             <span>
@@ -122,11 +142,6 @@ export default function DictationPanel({
           </label>
         </div>
       </section>
-
-      <div className="status-stack">
-        <p className="status">{statusLine}</p>
-        {errorLine ? <p className="error">{errorLine}</p> : null}
-      </div>
 
       <section className="editor-shell">
         <div className="result-header">
