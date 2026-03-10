@@ -71,3 +71,7 @@ WhisperPro is a Windows desktop app for fast, local voice dictation with a clean
 ## Support
 
 [Buy Me a Coffee - skroproduction](https://buymeacoffee.com/skroproduction)
+<img width="1103" height="774" alt="Capture d&#39;écran 2026-03-10 202328" src="https://github.com/user-attachments/assets/37eac949-b8a8-4d7e-b573-479b2d375754" />
+
+<img width="1091" height="773" alt="Capture d&#39;écran 2026-03-10 202338" src="https://github.com/user-attachments/assets/da2bac26-156a-4103-8e96-c05506e103bd" />
+
