@@ -125,16 +125,35 @@ fn transcribe_wav_impl(app_state: &AppState, wav_path: &str) -> Result<Transcrip
         });
     }
 
-    transcribe_with_strategy(
+    let mut transcription_input = wav.clone();
+    let normalized_temp = maybe_create_normalized_wav_copy(&wav)?;
+    if let Some(normalized_path) = normalized_temp.as_ref() {
+        info!(
+            target: "audio",
+            original = %wav.to_string_lossy(),
+            normalized = %normalized_path.to_string_lossy(),
+            "low input level detected, using normalized wav for transcription"
+        );
+        transcription_input = normalized_path.clone();
+    }
+
+    let mut result = transcribe_with_strategy(
         app_state,
         &whisper_cli_path,
         &model_path,
-        &wav,
+        &transcription_input,
         &settings.language,
         &settings.compute_mode,
         false,
         false,
-    )
+    )?;
+
+    if let Some(path) = normalized_temp {
+        let _ = fs::remove_file(path);
+    }
+
+    result.wav_path = wav.to_string_lossy().to_string();
+    Ok(result)
 }
 
 fn toggle_dictation_cycle_impl(app: &AppHandle, app_state: &AppState) -> Result<String, String> {
@@ -370,6 +389,14 @@ fn clamp_widget_pop_sound_volume(value: f32) -> f32 {
     value.clamp(0.0, 1.0)
 }
 
+fn normalize_widget_pop_sound_volume_from_db(value: f32) -> f32 {
+    if value.is_finite() && value > 2.0 {
+        // Legacy format stored as percentage (e.g. 65 or 200).
+        return clamp_widget_pop_sound_volume(value / 100.0);
+    }
+    clamp_widget_pop_sound_volume(value)
+}
+
 fn normalize_widget_pop_sound(value: &str) -> String {
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -480,6 +507,7 @@ fn main() {
             test_whisper_environment,
             get_settings,
             save_settings,
+            save_widget_preferences,
             get_default_model_path,
             get_default_whisper_cli_path,
             get_compute_capability,
@@ -562,12 +590,38 @@ mod tests {
     }
 
     #[test]
+    fn widget_pop_sound_volume_supports_legacy_percent_and_normalized_range() {
+        assert!((normalize_widget_pop_sound_volume_from_db(0.65) - 0.65).abs() < 0.0001);
+        assert!((normalize_widget_pop_sound_volume_from_db(65.0) - 0.65).abs() < 0.0001);
+        assert!((normalize_widget_pop_sound_volume_from_db(200.0) - 1.0).abs() < 0.0001);
+        assert!((clamp_widget_pop_sound_volume(2.4) - 1.0).abs() < 0.0001);
+    }
+
+    #[test]
     fn voice_commands_apply_punctuation_and_literal_escape_words() {
         let punctuated = apply_voice_commands("bonjour virgule test point d'interrogation");
         assert_eq!(punctuated, "Bonjour, test?");
 
         let literal_words = apply_voice_commands("le mot point et le mot virgule");
         assert_eq!(literal_words, "Point et virgule");
+    }
+
+    #[test]
+    fn voice_commands_remain_stable_with_irregular_whitespace() {
+        let punctuated = apply_voice_commands("bonjour   virgule\n\t test   point   d interrogation");
+        assert_eq!(punctuated, "Bonjour, test?");
+    }
+
+    #[test]
+    fn voice_commands_do_not_force_uppercase_after_single_line_break() {
+        let text = apply_voice_commands("bonjour ponctuation virgule nouvelle ligne test");
+        assert_eq!(text, "Bonjour,\ntest");
+    }
+
+    #[test]
+    fn voice_commands_keep_uppercase_for_paragraph_breaks() {
+        let text = apply_voice_commands("bonjour point final nouvelle ligne nouvelle ligne test");
+        assert_eq!(text, "Bonjour.\nTest");
     }
 
     #[test]

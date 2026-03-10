@@ -1,10 +1,11 @@
-﻿import { useMemo } from "react";
+﻿import { useEffect, useMemo } from "react";
 
 import DictationPanel from "./features/dictation/DictationPanel";
 import HistoryPanel from "./features/history/HistoryPanel";
 import OverlayWidget from "./features/overlay/OverlayWidget";
 import SettingsDrawer from "./features/settings/SettingsDrawer";
 import { useMainAppController } from "./features/app/useMainAppController";
+import { UI_THEME_STORAGE_KEY, WIDGET_THEME_STORAGE_KEY } from "./i18n";
 
 function MainApp() {
   const c = useMainAppController();
@@ -17,6 +18,15 @@ function MainApp() {
           <p className="brand-subtitle">{c.uiText.topbarSubtitle}</p>
         </div>
         <div className="top-actions">
+          <button
+            type="button"
+            className={`theme-toggle ${c.uiTheme === "dark" ? "dark" : "light"}`}
+            onClick={c.toggleUiTheme}
+            title={c.uiTheme === "dark" ? c.uiText.uiThemeSwitchToLight : c.uiText.uiThemeSwitchToDark}
+            aria-label={c.uiText.uiThemeLabel}
+          >
+            <span className={`theme-icon ${c.uiTheme === "dark" ? "moon" : "sun"}`} aria-hidden="true" />
+          </button>
           <div className="ui-language-flags" role="group" aria-label={c.uiText.uiLanguageLabel}>
             <button
               type="button"
@@ -47,23 +57,12 @@ function MainApp() {
       </header>
 
       <section className="content-grid">
-        <DictationPanel
-          model={c.dictation.model}
-          setters={c.dictation.setters}
-          handlers={c.dictation.handlers}
-        />
+        <DictationPanel model={c.dictation.model} setters={c.dictation.setters} handlers={c.dictation.handlers} />
 
-        <HistoryPanel
-          model={c.history.model}
-          handlers={c.history.handlers}
-        />
+        <HistoryPanel model={c.history.model} handlers={c.history.handlers} />
       </section>
 
-      <SettingsDrawer
-        model={c.settings.model}
-        setters={c.settings.setters}
-        handlers={c.settings.handlers}
-      />
+      <SettingsDrawer model={c.settings.model} setters={c.settings.setters} handlers={c.settings.handlers} />
     </main>
   );
 }
@@ -73,6 +72,37 @@ function App() {
     const params = new URLSearchParams(window.location.search);
     return params.get("overlay") === "1";
   }, []);
+
+  useEffect(() => {
+    const applyTheme = (theme: string, widgetThemeMode: string) => {
+      const appTheme = theme === "dark" ? "dark" : "light";
+      const normalized = isOverlayWindow && (widgetThemeMode === "light" || widgetThemeMode === "dark")
+        ? widgetThemeMode
+        : appTheme;
+      document.documentElement.setAttribute("data-theme", normalized);
+    };
+
+    const readAndApply = () => {
+      const storedTheme = localStorage.getItem(UI_THEME_STORAGE_KEY) ?? "light";
+      const storedWidgetThemeMode = localStorage.getItem(WIDGET_THEME_STORAGE_KEY) ?? "follow";
+      applyTheme(storedTheme, storedWidgetThemeMode);
+    };
+
+    try {
+      readAndApply();
+    } catch {
+      applyTheme("light", "follow");
+    }
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === UI_THEME_STORAGE_KEY || event.key === WIDGET_THEME_STORAGE_KEY) {
+        readAndApply();
+      }
+    };
+
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [isOverlayWindow]);
 
   if (isOverlayWindow) return <OverlayWidget />;
   return <MainApp />;

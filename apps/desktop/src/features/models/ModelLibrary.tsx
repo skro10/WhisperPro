@@ -74,6 +74,7 @@ export default function ModelLibrary({
                 {model.installed ? (
                   <button
                     type="button"
+                    className="danger"
                     onClick={() => onRemoveModel(model.id)}
                     disabled={modelsBusy || isDownloadInProgress}
                     title={uiText.tipDeleteModel}

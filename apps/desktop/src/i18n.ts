@@ -1,6 +1,10 @@
-﻿export type UiLanguage = "fr" | "en";
+export type UiLanguage = "fr" | "en";
+export type UiTheme = "light" | "dark";
+export type WidgetThemeMode = "follow" | "light" | "dark";
 
 export const UI_LANGUAGE_STORAGE_KEY = "whisperpro_ui_language";
+export const UI_THEME_STORAGE_KEY = "whisperpro_ui_theme";
+export const WIDGET_THEME_STORAGE_KEY = "whisperpro_widget_theme_mode";
 
 export const UI_LANGUAGE_OPTIONS: Array<{ value: UiLanguage; label: string }> = [
   { value: "fr", label: "Fran\u00E7ais" },
@@ -16,6 +20,11 @@ type ModelExperience = {
 type UiText = {
   topbarSubtitle: string;
   uiLanguageLabel: string;
+  uiThemeLabel: string;
+  uiThemeLight: string;
+  uiThemeDark: string;
+  uiThemeSwitchToLight: string;
+  uiThemeSwitchToDark: string;
   options: string;
   quit: string;
   startSpeaking: string;
@@ -63,6 +72,10 @@ type UiText = {
   detectHint: string;
   voicePunctuation: string;
   showWidget: string;
+  widgetTheme: string;
+  widgetThemeFollowApp: string;
+  widgetThemeLight: string;
+  widgetThemeDark: string;
   widgetPopSound: string;
   previewSound: string;
   previewingSound: string;
@@ -128,6 +141,7 @@ type UiText = {
   tipShortcut: string;
   tipVoicePunctuation: string;
   tipWidget: string;
+  tipWidgetTheme: string;
   tipWidgetPopSound: string;
   tipWidgetOpacity: string;
   tipWidgetPopSoundVolume: string;
@@ -142,6 +156,7 @@ type UiText = {
   ariaHelpShortcut: string;
   ariaHelpPunctuation: string;
   ariaHelpWidget: string;
+  ariaHelpWidgetTheme: string;
   ariaHelpWidgetPopSound: string;
   ariaHelpWidgetOpacity: string;
   ariaHelpWidgetPopSoundVolume: string;
@@ -160,6 +175,11 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
   fr: {
     topbarSubtitle: "Dict\u00E9e vocale locale, rapide et claire",
     uiLanguageLabel: "Interface",
+    uiThemeLabel: "Th\u00E8me",
+    uiThemeLight: "Clair",
+    uiThemeDark: "Sombre",
+    uiThemeSwitchToLight: "Passer en th\u00E8me clair",
+    uiThemeSwitchToDark: "Passer en th\u00E8me sombre",
     options: "Options",
     quit: "Quitter",
     startSpeaking: "Commencer \u00E0 parler",
@@ -182,13 +202,13 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     clear: "Vider",
     noHistory: "Aucune transcription enregistr\u00E9e pour le moment.",
     unknown: "Inconnu",
-    save: "Enregistrer",
+    save: "Appliquer",
     reset: "R\u00E9initialiser",
     close: "Fermer",
     saving: "Sauvegarde...",
     downloading: "T\u00E9l\u00E9chargement en cours...",
     cancel: "Annuler",
-    unsavedChanges: "Modifications non enregistr\u00E9es. Clique sur Enregistrer pour appliquer.",
+    unsavedChanges: "Modifications non appliqu\u00E9es. Clique sur Appliquer pour valider.",
     sectionGeneral: "G\u00E9n\u00E9ral",
     sectionShortcutInput: "Raccourci et saisie",
     sectionWidget: "Widget",
@@ -204,14 +224,18 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     keyboardShortcut: "Raccourci clavier",
     detectKeys: "D\u00E9tecter touches",
     cancelCapture: "Annuler capture",
-    detectHint: 'Utilise "D\u00E9tecter touches" puis clique "Enregistrer".',
+    detectHint: 'Utilise "D\u00E9tecter touches" puis clique "Appliquer".',
     voicePunctuation: "Activer les commandes vocales de ponctuation",
     showWidget: "Afficher le mini-widget",
+    widgetTheme: "Th\u00E8me du widget",
+    widgetThemeFollowApp: "Suivre le th\u00E8me app",
+    widgetThemeLight: "Clair",
+    widgetThemeDark: "Sombre",
     widgetPopSound: "Son d'apparition du widget",
-    previewSound: "Préécouter",
+    previewSound: "Pr\u00E9\u00E9couter",
     previewingSound: "Lecture...",
     widgetOpacity: "Opacit\u00E9 du mini-widget",
-    widgetOpacityHint: "Plus bas = plus discret. Valeur appliqu\u00E9e apr\u00E8s Enregistrer.",
+    widgetOpacityHint: "Plus bas = plus discret. Valeur appliqu\u00E9e imm\u00E9diatement.",
     widgetPopSoundVolume: "Volume du son d'apparition",
     widgetPopSoundVolumeHint: "R\u00E8gle le volume du son jou\u00E9 quand le widget appara\u00EEt.",
     library: "Biblioth\u00E8que",
@@ -267,7 +291,7 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     overlayListening: "\u00C9coute",
     overlayTranscribing: "Transcription",
     overlayError: "Erreur",
-    settingsSaved: "Options enregistr\u00E9es",
+    settingsSaved: "Options appliqu\u00E9es",
     settingsResetDone: "Options r\u00E9initialis\u00E9es",
     shortcutEmptyExample: "Raccourci vide. Exemple: Ctrl+Shift+Space",
     noneValue: "Aucun",
@@ -275,9 +299,10 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     tipTranslation: "Choisis une langue cible pour traduire automatiquement apr\u00E8s la transcription.",
     tipRecognitionLanguage: "Langue principale de reconnaissance vocale.",
     tipComputeMode: "Auto: tente GPU puis CPU. CPU: compatible partout. GPU: plus rapide si disponible.",
-    tipShortcut: "Clique \"D\u00E9tecter touches\", fais ta combinaison, puis \"Enregistrer\".",
+    tipShortcut: "Clique \"D\u00E9tecter touches\", fais ta combinaison, puis \"Appliquer\".",
     tipVoicePunctuation: "Transforme des mots comme \"virgule\", \"point\", \"point d\u2019interrogation\" en ponctuation.",
     tipWidget: "Affiche le widget de statut pendant la dict\u00E9e.",
+    tipWidgetTheme: "Choisis l'apparence du widget: suivre l'app, clair ou sombre.",
     tipWidgetPopSound: "Choisis le son jou\u00E9 quand le widget appara\u00EEt.",
     tipWidgetOpacity: "R\u00E8gle la visibilit\u00E9 du widget: plus bas = plus discret.",
     tipWidgetPopSoundVolume: "Volume du son jou\u00E9 au pop du widget (0% = muet).",
@@ -292,6 +317,7 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     ariaHelpShortcut: "Aide raccourci clavier",
     ariaHelpPunctuation: "Aide ponctuation vocale",
     ariaHelpWidget: "Aide mini-widget",
+    ariaHelpWidgetTheme: "Aide th\u00E8me widget",
     ariaHelpWidgetPopSound: "Aide son d'apparition widget",
     ariaHelpWidgetOpacity: "Aide opacit\u00E9 widget",
     ariaHelpWidgetPopSoundVolume: "Aide volume son widget",
@@ -353,6 +379,11 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
   en: {
     topbarSubtitle: "Local voice dictation, fast and clear",
     uiLanguageLabel: "Interface",
+    uiThemeLabel: "Theme",
+    uiThemeLight: "Light",
+    uiThemeDark: "Dark",
+    uiThemeSwitchToLight: "Switch to light theme",
+    uiThemeSwitchToDark: "Switch to dark theme",
     options: "Options",
     quit: "Quit",
     startSpeaking: "Start speaking",
@@ -375,13 +406,13 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     clear: "Clear",
     noHistory: "No transcription saved yet.",
     unknown: "Unknown",
-    save: "Save",
+    save: "Apply",
     reset: "Reset",
     close: "Close",
     saving: "Saving...",
     downloading: "Downloading...",
     cancel: "Cancel",
-    unsavedChanges: "Unsaved changes. Click Save to apply them.",
+    unsavedChanges: "Changes not applied yet. Click Apply to confirm.",
     sectionGeneral: "General",
     sectionShortcutInput: "Shortcut and input",
     sectionWidget: "Widget",
@@ -397,14 +428,18 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     keyboardShortcut: "Keyboard shortcut",
     detectKeys: "Detect keys",
     cancelCapture: "Cancel capture",
-    detectHint: 'Use "Detect keys", then click "Save".',
+    detectHint: 'Use "Detect keys", then click "Apply".',
     voicePunctuation: "Enable punctuation voice commands",
     showWidget: "Show mini-widget",
+    widgetTheme: "Widget theme",
+    widgetThemeFollowApp: "Follow app theme",
+    widgetThemeLight: "Light",
+    widgetThemeDark: "Dark",
     widgetPopSound: "Widget pop sound",
     previewSound: "Preview",
     previewingSound: "Playing...",
     widgetOpacity: "Mini-widget opacity",
-    widgetOpacityHint: "Lower = more discreet. Applied after Save.",
+    widgetOpacityHint: "Lower = more discreet. Applied immediately.",
     widgetPopSoundVolume: "Pop sound volume",
     widgetPopSoundVolumeHint: "Adjust the sound played when the widget appears.",
     library: "Library",
@@ -460,7 +495,7 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     overlayListening: "Listening",
     overlayTranscribing: "Transcribing",
     overlayError: "Error",
-    settingsSaved: "Options saved",
+    settingsSaved: "Options applied",
     settingsResetDone: "Options reset",
     shortcutEmptyExample: "Shortcut is empty. Example: Ctrl+Shift+Space",
     noneValue: "None",
@@ -468,9 +503,10 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     tipTranslation: "Choose a target language to automatically translate after transcription.",
     tipRecognitionLanguage: "Primary speech recognition language.",
     tipComputeMode: "Auto: tries GPU then CPU. CPU: widest compatibility. GPU: faster when available.",
-    tipShortcut: "Click \"Detect keys\", press your combo, then click \"Save\".",
+    tipShortcut: "Click \"Detect keys\", press your combo, then click \"Apply\".",
     tipVoicePunctuation: "Turns words like \"comma\", \"period\" or \"question mark\" into punctuation.",
     tipWidget: "Shows the status mini-widget during dictation.",
+    tipWidgetTheme: "Choose widget appearance: follow app, light, or dark.",
     tipWidgetPopSound: "Choose the sound played when the widget appears.",
     tipWidgetOpacity: "Adjust widget visibility: lower = more discreet.",
     tipWidgetPopSoundVolume: "Volume of the sound played on widget pop-in (0% = mute).",
@@ -485,6 +521,7 @@ export const UI_TEXT: Record<UiLanguage, UiText> = {
     ariaHelpShortcut: "Shortcut help",
     ariaHelpPunctuation: "Punctuation help",
     ariaHelpWidget: "Widget help",
+    ariaHelpWidgetTheme: "Widget theme help",
     ariaHelpWidgetPopSound: "Widget pop sound help",
     ariaHelpWidgetOpacity: "Widget opacity help",
     ariaHelpWidgetPopSoundVolume: "Widget sound volume help",

@@ -66,6 +66,40 @@ pub(crate) fn save_settings(app: AppHandle, state: State<'_, AppState>, mut sett
 }
 
 #[tauri::command]
+pub(crate) fn save_widget_preferences(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    widget_opacity: f32,
+    widget_pop_sound_volume: f32,
+    widget_pop_sound: String,
+) -> Result<UserSettings, String> {
+    let app_state = state.inner();
+    with_error_log(app_state, || {
+        let mut settings = get_settings_from_db(
+            &app_state.db_path,
+            &app_state.model_default_path,
+            &app_state.whisper_cli_default_path,
+        )?;
+
+        settings.widget_opacity = clamp_widget_opacity(widget_opacity);
+        settings.widget_pop_sound_volume = clamp_widget_pop_sound_volume(widget_pop_sound_volume);
+        settings.widget_pop_sound = normalize_widget_pop_sound(&widget_pop_sound);
+
+        let conn = open_db(&app_state.db_path)?;
+        save_settings_impl(&conn, &settings)?;
+        let _ = app.emit("settings-updated", settings.clone());
+        info!(
+            target: "settings",
+            widget_opacity = settings.widget_opacity,
+            widget_pop_sound_volume = settings.widget_pop_sound_volume,
+            widget_pop_sound = %settings.widget_pop_sound,
+            "widget preferences saved"
+        );
+        Ok(settings)
+    })
+}
+
+#[tauri::command]
 pub(crate) fn get_default_model_path(state: State<'_, AppState>) -> String {
     state.inner().model_default_path.to_string_lossy().to_string()
 }

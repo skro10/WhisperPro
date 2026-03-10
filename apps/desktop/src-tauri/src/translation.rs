@@ -95,7 +95,13 @@ pub(crate) fn apply_voice_commands(text: &str) -> String {
         return String::new();
     }
 
-    let mut out = format!(" {} ", trimmed.to_lowercase().replace('’', "'"));
+    let normalized = trimmed
+        .to_lowercase()
+        .replace('’', "'")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut out = format!(" {} ", normalized);
 
     let escapes = [
         (" le mot point ", " __WORD_POINT__ "),
@@ -108,16 +114,14 @@ pub(crate) fn apply_voice_commands(text: &str) -> String {
     }
 
     let replacements = [
-        (" nouvelle ligne ", "\n"),
-        (" retour a la ligne ", "\n"),
-        (" retour à la ligne ", "\n"),
-        (" retour ligne ", "\n"),
         (" ponctuation point d'interrogation ", "? "),
         (" point d'interrogation ", "? "),
         (" point d interrogation ", "? "),
+        (" point interrogation ", "? "),
         (" ponctuation point d'exclamation ", "! "),
         (" point d'exclamation ", "! "),
         (" point d exclamation ", "! "),
+        (" point exclamation ", "! "),
         (" ponctuation point virgule ", "; "),
         (" point virgule ", "; "),
         (" ponctuation deux-points ", ": "),
@@ -131,10 +135,30 @@ pub(crate) fn apply_voice_commands(text: &str) -> String {
         (" ouvrir parenthese ", " ("),
         (" fermer parenthèse ", ") "),
         (" fermer parenthese ", ") "),
+        (" nouvelle ligne ", "\n"),
+        (" retour a la ligne ", "\n"),
+        (" retour à la ligne ", "\n"),
+        (" retour ligne ", "\n"),
     ];
 
     for (from, to) in replacements {
         out = out.replace(from, to);
+    }
+
+    let newline_commands = [
+        "nouvelle ligne",
+        "retour a la ligne",
+        "retour à la ligne",
+        "retour ligne",
+    ];
+    for _ in 0..2 {
+        for command in newline_commands {
+            out = out.replace(&format!("\n{command} "), "\n");
+            out = out.replace(&format!(" {command}\n"), "\n");
+            out = out.replace(&format!(" {command} "), "\n");
+            out = out.replace(&format!("{command} "), "\n");
+            out = out.replace(&format!(" {command}"), "\n");
+        }
     }
 
     out = out
@@ -162,22 +186,38 @@ pub(crate) fn apply_voice_commands(text: &str) -> String {
 pub(crate) fn capitalize_sentences(input: &str) -> String {
     let mut output = String::with_capacity(input.len());
     let mut capitalize_next = true;
+    let mut previous_non_whitespace: Option<char> = None;
+    let mut consecutive_newlines: usize = 0;
 
     for c in input.chars() {
+        if c == '\n' {
+            consecutive_newlines += 1;
+        } else if !c.is_whitespace() {
+            consecutive_newlines = 0;
+        }
+
         if capitalize_next && c.is_alphabetic() {
             for up in c.to_uppercase() {
                 output.push(up);
             }
             capitalize_next = false;
+            previous_non_whitespace = Some(c);
             continue;
         }
 
         output.push(c);
 
-        if matches!(c, '.' | '!' | '?' | '\n') {
+        if matches!(c, '.' | '!' | '?') {
             capitalize_next = true;
+        } else if c == '\n' {
+            // Keep paragraph-start capitalization for explicit blank lines,
+            // but avoid forcing uppercase after a single line break (e.g. after a comma).
+            if consecutive_newlines >= 2 && previous_non_whitespace.is_some() {
+                capitalize_next = true;
+            }
         } else if !c.is_whitespace() {
             capitalize_next = false;
+            previous_non_whitespace = Some(c);
         }
     }
 

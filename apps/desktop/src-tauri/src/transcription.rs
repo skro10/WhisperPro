@@ -1,5 +1,5 @@
 ﻿use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -8,6 +8,13 @@ use tracing::info;
 
 use crate::state::{AppState, ComputeCapabilityReport, TranscriptSegment, TranscriptionResult, WhisperServerRuntime};
 use crate::{apply_no_window, normalize_compute_mode};
+
+pub(crate) struct WavAnalysis {
+    pub(crate) sample_count: u64,
+    pub(crate) rms: f64,
+    pub(crate) peak_norm: f64,
+    pub(crate) activity_ratio: f64,
+}
 
 pub(crate) fn transcribe_with_strategy(
     app_state: &AppState,
@@ -147,7 +154,7 @@ pub(crate) fn run_transcription_cli(
         String::from_utf8_lossy(&output.stdout).to_string()
     };
 
-    let cleaned = text.trim().to_string();
+    let cleaned = sanitize_transcript_text(text.trim());
     let segments = if cleaned.is_empty() {
         vec![]
     } else {
@@ -298,7 +305,7 @@ pub(crate) fn run_transcription_via_server(
         String::new()
     };
 
-    let cleaned = text.trim().to_string();
+    let cleaned = sanitize_transcript_text(text.trim());
     let segments = if cleaned.is_empty() {
         vec![]
     } else {
@@ -479,16 +486,96 @@ pub(crate) fn err_wav_missing(wav_path: &Path) -> String {
 }
 
 pub(crate) fn is_probably_silent_wav(wav_path: &Path) -> Result<bool, String> {
+    let analysis = analyze_wav(wav_path)?;
+    if analysis.sample_count == 0 {
+        return Ok(true);
+    }
+
+    let silent =
+        analysis.rms < 0.0032 && analysis.peak_norm < 0.03 && analysis.activity_ratio < 0.0015;
+    Ok(silent)
+}
+
+pub(crate) fn maybe_create_normalized_wav_copy(wav_path: &Path) -> Result<Option<PathBuf>, String> {
+    let analysis = analyze_wav(wav_path)?;
+    if analysis.sample_count == 0 {
+        return Ok(None);
+    }
+
+    // Only boost input when voice is likely too quiet.
+    if analysis.peak_norm >= 0.45 && analysis.rms >= 0.045 {
+        return Ok(None);
+    }
+    if analysis.activity_ratio < 0.001 {
+        return Ok(None);
+    }
+
+    let mut reader =
+        hound::WavReader::open(wav_path).map_err(|e| format!("Lecture WAV impossible: {e}"))?;
+    let spec = reader.spec();
+    if spec.sample_format != hound::SampleFormat::Int || spec.bits_per_sample != 16 {
+        return Ok(None);
+    }
+
+    let gain_from_peak = if analysis.peak_norm > 0.0 {
+        0.86 / analysis.peak_norm
+    } else {
+        1.0
+    };
+    let gain_from_rms = if analysis.rms > 0.0 {
+        0.11 / analysis.rms
+    } else {
+        1.0
+    };
+    let gain = gain_from_peak.min(gain_from_rms).clamp(1.0, 8.0);
+    if gain <= 1.25 {
+        return Ok(None);
+    }
+
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| format!("Horodatage impossible: {e}"))?
+        .as_millis();
+    let normalized_path = std::env::temp_dir().join(format!("whisperpro_recording_norm_{stamp}.wav"));
+    let mut writer = hound::WavWriter::create(&normalized_path, spec)
+        .map_err(|e| format!("Ecriture WAV normalisee impossible: {e}"))?;
+
+    for s in reader.samples::<i16>() {
+        let sample = s.map_err(|e| format!("Lecture sample WAV impossible: {e}"))? as f32;
+        let boosted = (sample * gain as f32).round().clamp(i16::MIN as f32, i16::MAX as f32);
+        writer
+            .write_sample(boosted as i16)
+            .map_err(|e| format!("Ecriture sample WAV normalisee impossible: {e}"))?;
+    }
+
+    writer
+        .finalize()
+        .map_err(|e| format!("Finalisation WAV normalisee impossible: {e}"))?;
+
+    Ok(Some(normalized_path))
+}
+
+pub(crate) fn analyze_wav(wav_path: &Path) -> Result<WavAnalysis, String> {
     let mut reader =
         hound::WavReader::open(wav_path).map_err(|e| format!("Lecture WAV impossible: {e}"))?;
     let spec = reader.spec();
     if spec.sample_format != hound::SampleFormat::Int || spec.bits_per_sample == 0 {
-        return Ok(false);
+        return Ok(WavAnalysis {
+            sample_count: 0,
+            rms: 0.0,
+            peak_norm: 0.0,
+            activity_ratio: 0.0,
+        });
     }
 
     let max_amp = ((1_i64 << (spec.bits_per_sample - 1)) - 1) as f64;
     if max_amp <= 0.0 {
-        return Ok(false);
+        return Ok(WavAnalysis {
+            sample_count: 0,
+            rms: 0.0,
+            peak_norm: 0.0,
+            activity_ratio: 0.0,
+        });
     }
 
     let mut sample_count: u64 = 0;
@@ -510,13 +597,20 @@ pub(crate) fn is_probably_silent_wav(wav_path: &Path) -> Result<bool, String> {
     }
 
     if sample_count == 0 {
-        return Ok(true);
+        return Ok(WavAnalysis {
+            sample_count: 0,
+            rms: 0.0,
+            peak_norm: 0.0,
+            activity_ratio: 0.0,
+        });
     }
 
-    let rms = (energy_sum / sample_count as f64).sqrt();
-    let activity_ratio = activity_count as f64 / sample_count as f64;
-    let silent = rms < 0.0032 && peak_norm < 0.03 && activity_ratio < 0.0015;
-    Ok(silent)
+    Ok(WavAnalysis {
+        sample_count,
+        rms: (energy_sum / sample_count as f64).sqrt(),
+        peak_norm,
+        activity_ratio: activity_count as f64 / sample_count as f64,
+    })
 }
 
 pub(crate) fn normalize_language(language: &str) -> String {
@@ -530,6 +624,122 @@ pub(crate) fn normalize_language(language: &str) -> String {
         prefix.to_string()
     } else {
         lower
+    }
+}
+
+fn sanitize_transcript_text(input: &str) -> String {
+    let cleaned = input.trim();
+    if cleaned.is_empty() {
+        return String::new();
+    }
+    if is_known_hallucination(cleaned) {
+        return String::new();
+    }
+    cleaned.to_string()
+}
+
+fn is_known_hallucination(input: &str) -> bool {
+    let normalized = input
+        .to_lowercase()
+        .replace('-', " ")
+        .replace('\'', " ")
+        .replace('’', " ")
+        .replace(':', " ")
+        .replace(';', " ")
+        .replace(',', " ")
+        .replace('.', " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    normalized == "sous titrage societe radio canada"
+        || normalized == "sous titrage société radio canada"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{analyze_wav, maybe_create_normalized_wav_copy, sanitize_transcript_text};
+    use std::f32::consts::PI;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+    fn make_temp_dir(name: &str) -> PathBuf {
+        let mut dir = std::env::temp_dir();
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before epoch")
+            .as_nanos();
+        let seq = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        dir.push(format!("whisperpro-transcription-tests-{name}-{stamp}-{seq}"));
+        fs::create_dir_all(&dir).expect("create temp test dir");
+        dir
+    }
+
+    fn write_sine_wav(path: &PathBuf, amplitude: f32) {
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: 16_000,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+        let mut writer = hound::WavWriter::create(path, spec).expect("create wav");
+        let frequency = 440.0_f32;
+        let duration_samples = 16_000;
+        for i in 0..duration_samples {
+            let t = i as f32 / 16_000.0;
+            let sample = (2.0 * PI * frequency * t).sin() * amplitude;
+            let pcm = (sample * i16::MAX as f32)
+                .round()
+                .clamp(i16::MIN as f32, i16::MAX as f32) as i16;
+            writer.write_sample(pcm).expect("write sample");
+        }
+        writer.finalize().expect("finalize wav");
+    }
+
+    #[test]
+    fn strips_known_radio_canada_hallucination() {
+        assert_eq!(sanitize_transcript_text("Sous-titrage société radio-canada"), "");
+        assert_eq!(sanitize_transcript_text("   sous titrage societe radio canada   "), "");
+    }
+
+    #[test]
+    fn keeps_regular_transcript_content() {
+        assert_eq!(sanitize_transcript_text("Bonjour tout le monde"), "Bonjour tout le monde");
+    }
+
+    #[test]
+    fn low_level_audio_gets_normalized_copy() {
+        let temp = make_temp_dir("normalize-low");
+        let input = temp.join("low.wav");
+        write_sine_wav(&input, 0.035);
+
+        let before = analyze_wav(&input).expect("analyze before");
+        let normalized = maybe_create_normalized_wav_copy(&input)
+            .expect("normalize result")
+            .expect("normalized copy path");
+        let after = analyze_wav(&normalized).expect("analyze after");
+
+        assert!(after.peak_norm > before.peak_norm);
+        assert!(after.rms > before.rms);
+
+        let _ = fs::remove_file(normalized);
+        let _ = fs::remove_dir_all(temp);
+    }
+
+    #[test]
+    fn healthy_audio_skips_normalization() {
+        let temp = make_temp_dir("normalize-skip");
+        let input = temp.join("healthy.wav");
+        write_sine_wav(&input, 0.70);
+
+        let normalized = maybe_create_normalized_wav_copy(&input).expect("normalize result");
+        assert!(normalized.is_none());
+
+        let _ = fs::remove_dir_all(temp);
     }
 }
 

@@ -24,73 +24,120 @@ export default function OverlayWidget() {
   const [widgetPopSoundVolume, setWidgetPopSoundVolume] = useState(defaultSettings.widget_pop_sound_volume);
   const [widgetPopSound, setWidgetPopSound] = useState(defaultSettings.widget_pop_sound);
   const uiText = UI_TEXT[uiLanguage];
-  const terminalStateAtRef = useRef<number>(0);
-  const terminalLockUntilRef = useRef<number>(0);
   const stateRef = useRef<string>("idle");
+  const widgetPopSoundRef = useRef<string>(defaultSettings.widget_pop_sound);
+  const widgetPopSoundVolumeRef = useRef<number>(defaultSettings.widget_pop_sound_volume);
   const popAudioRef = useRef<HTMLAudioElement | null>(null);
+  const popAudioContextRef = useRef<AudioContext | null>(null);
+  const popAudioSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const popAudioGainRef = useRef<GainNode | null>(null);
   const isPoppingSoundRef = useRef(false);
+  const disconnectPopAudioGraph = () => {
+    try {
+      popAudioSourceRef.current?.disconnect();
+      popAudioGainRef.current?.disconnect();
+    } catch {
+      // ignore
+    } finally {
+      popAudioSourceRef.current = null;
+      popAudioGainRef.current = null;
+    }
+  };
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
   useEffect(() => {
-    const audio = new Audio(`/sounds/${widgetPopSound}`);
-    audio.preload = "auto";
-    popAudioRef.current = audio;
+    widgetPopSoundRef.current = widgetPopSound;
+  }, [widgetPopSound]);
+
+  useEffect(() => {
+    widgetPopSoundVolumeRef.current = widgetPopSoundVolume;
+  }, [widgetPopSoundVolume]);
+
+  useEffect(() => {
     return () => {
+      if (popAudioRef.current) {
+        try {
+          popAudioRef.current.pause();
+        } catch {
+          // ignore
+        }
+      }
+      disconnectPopAudioGraph();
+      if (popAudioContextRef.current && popAudioContextRef.current.state !== "closed") {
+        void popAudioContextRef.current.close();
+      }
       popAudioRef.current = null;
+      popAudioContextRef.current = null;
     };
   }, [widgetPopSound]);
 
   const playWidgetPopSound = () => {
-    if (widgetPopSoundVolume <= 0) return;
-    const audio = popAudioRef.current;
-    if (!audio || isPoppingSoundRef.current) return;
+    const soundFile = widgetPopSoundRef.current;
+    const soundVolume = widgetPopSoundVolumeRef.current;
+    if (soundVolume <= 0) return;
+    if (isPoppingSoundRef.current) return;
     isPoppingSoundRef.current = true;
-    try {
-      audio.pause();
-      audio.currentTime = 0;
-      audio.volume = clamp01(widgetPopSoundVolume * getWidgetSoundGain(widgetPopSound));
-      void audio.play().catch(() => {
-        // no sound asset yet or playback blocked by platform policy
-      }).finally(() => {
+    const play = async () => {
+      try {
+        if (popAudioRef.current) {
+          popAudioRef.current.pause();
+          popAudioRef.current.currentTime = 0;
+        }
+        disconnectPopAudioGraph();
+
+        const audio = new Audio(`/sounds/${soundFile}`);
+        audio.preload = "auto";
+        const desiredVolume = clamp01(soundVolume * getWidgetSoundGain(soundFile));
+        const AudioContextCtor =
+          window.AudioContext ||
+          (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+        if (AudioContextCtor) {
+          const context = popAudioContextRef.current ?? new AudioContextCtor();
+          popAudioContextRef.current = context;
+          if (context.state === "suspended") {
+            await context.resume();
+          }
+          const source = context.createMediaElementSource(audio);
+          const gain = context.createGain();
+          gain.gain.value = desiredVolume;
+          source.connect(gain);
+          gain.connect(context.destination);
+          popAudioSourceRef.current = source;
+          popAudioGainRef.current = gain;
+          audio.volume = 1;
+        } else {
+          audio.volume = desiredVolume;
+        }
+
+        popAudioRef.current = audio;
+        audio.onended = () => {
+          disconnectPopAudioGraph();
+          isPoppingSoundRef.current = false;
+        };
+        audio.onerror = () => {
+          disconnectPopAudioGraph();
+          isPoppingSoundRef.current = false;
+        };
+        await audio.play();
+      } catch {
+        disconnectPopAudioGraph();
         isPoppingSoundRef.current = false;
-      });
-    } catch {
-      isPoppingSoundRef.current = false;
-    }
+      }
+    };
+    void play();
   };
 
   const applyWidgetState = (nextState: string) => {
-    const now = Date.now();
-    const isTerminal = nextState === "done" || nextState === "error";
     const isActive = nextState === "listening" || nextState === "transcribing" || nextState === "busy";
-
-    if (isTerminal) {
-      if (stateRef.current === nextState) return;
-      terminalStateAtRef.current = now;
-      terminalLockUntilRef.current = now + 760;
-      setState(nextState);
-      return;
-    }
-
-    if (nextState === "idle") {
-      if (terminalStateAtRef.current !== 0 && now - terminalStateAtRef.current < 1200) return;
-      setState("idle");
-      return;
-    }
-
     if (isActive) {
-      if (terminalLockUntilRef.current !== 0 && now < terminalLockUntilRef.current) return;
-      terminalStateAtRef.current = 0;
-      terminalLockUntilRef.current = 0;
       const wasActive =
         stateRef.current === "listening" || stateRef.current === "transcribing" || stateRef.current === "busy";
       if (!wasActive) {
         playWidgetPopSound();
       }
-      setState(nextState);
-      return;
     }
 
     setState(nextState);
@@ -161,14 +208,12 @@ export default function OverlayWidget() {
 
     const bootstrap = async () => {
       try {
-        const [status, loadedSettings] = await Promise.all([
-          getDictationStatus<DictationStatusEvent>(),
-          getSettings<UserSettings>()
-        ]);
-        applyWidgetState(status.state);
+        const loadedSettings = await getSettings<UserSettings>();
         setWidgetOpacity(Math.max(0.25, Math.min(1, loadedSettings.widget_opacity ?? defaultSettings.widget_opacity)));
         setWidgetPopSoundVolume(Math.max(0, Math.min(1, loadedSettings.widget_pop_sound_volume ?? defaultSettings.widget_pop_sound_volume)));
         setWidgetPopSound((loadedSettings.widget_pop_sound || DEFAULT_WIDGET_POP_SOUND).trim() || DEFAULT_WIDGET_POP_SOUND);
+        const status = await getDictationStatus<DictationStatusEvent>();
+        applyWidgetState(status.state);
       } catch {
         // ignore
       }

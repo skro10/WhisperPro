@@ -33,8 +33,28 @@ export function getSettings<T>(): Promise<T> {
   return invoke<T>("get_settings");
 }
 
+export function getDefaultModelPath(): Promise<string> {
+  return invoke<string>("get_default_model_path");
+}
+
+export function getDefaultWhisperCliPath(): Promise<string> {
+  return invoke<string>("get_default_whisper_cli_path");
+}
+
 export function saveSettings<S>(settings: S): Promise<void> {
   return invoke<void>("save_settings", { settings });
+}
+
+export function saveWidgetPreferences<T>(
+  widgetOpacity: number,
+  widgetPopSoundVolume: number,
+  widgetPopSound: string
+): Promise<T> {
+  return invoke<T>("save_widget_preferences", {
+    widgetOpacity,
+    widgetPopSoundVolume,
+    widgetPopSound
+  });
 }
 
 export function listModels<T>(): Promise<T> {

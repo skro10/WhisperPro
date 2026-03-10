@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 
 import { UI_TEXT } from "../../i18n";
+import type { WidgetThemeMode } from "../../i18n";
 import type {
   ComputeCapabilityReport,
   HistoryItem,
@@ -45,6 +46,8 @@ export type DictationPanelHandlers = {
   onStopRecordingAndTranscribe: () => void;
   onActivateModel: (modelId: string) => void;
   onTranslationTargetChange: (next: string) => void;
+  onShowOriginalText: () => void;
+  onShowTranslatedText: () => void;
   onCopyVisibleText: () => void;
 };
 
@@ -80,6 +83,7 @@ export type SettingsDrawerModel = {
   downloadingModelId: string | null;
   widgetSoundOptions: string[];
   previewSoundPlaying: boolean;
+  widgetThemeMode: WidgetThemeMode;
   widgetSoundLabel: (fileName: string) => string;
   modelDisplayLabel: (model: { id: string; label: string }) => string;
 };
@@ -97,6 +101,10 @@ export type SettingsDrawerHandlers = {
   onResetSettings: () => void;
   onRepairRuntime: () => void;
   onCancelModelDownload: () => void;
+  onWidgetSoundChange: (soundFile: string) => void;
+  onWidgetThemeModeChange: (mode: WidgetThemeMode) => void;
+  onWidgetSoundVolumeChange: (volume: number) => void;
+  onWidgetOpacityChange: (opacity: number) => void;
   onPreviewWidgetSound: () => void;
   onDownloadModel: (modelId: string) => void;
   onRemoveModel: (modelId: string) => void;

@@ -37,12 +37,14 @@ export default function DictationPanel({
     translationError,
     modelDisplayLabel
   } = model;
-  const { setTextView, setTranslatedText, setTranscript } = setters;
+  const { setTranslatedText, setTranscript } = setters;
   const {
     onStartRecording,
     onStopRecordingAndTranscribe,
     onActivateModel,
     onTranslationTargetChange,
+    onShowOriginalText,
+    onShowTranslatedText,
     onCopyVisibleText
   } = handlers;
 
@@ -132,13 +134,13 @@ export default function DictationPanel({
           <div className="inline-actions">
             {translationTarget !== "none" ? (
               <>
-                <button type="button" className={textView === "source" ? "ghost" : "secondary"} onClick={() => setTextView("source")}>
+                <button type="button" className={textView === "source" ? "ghost" : "secondary"} onClick={onShowOriginalText}>
                   {uiText.original}
                 </button>
                 <button
                   type="button"
                   className={textView === "translated" ? "ghost" : "secondary"}
-                  onClick={() => setTextView("translated")}
+                  onClick={onShowTranslatedText}
                   disabled={!translatedText}
                 >
                   {uiText.translated}

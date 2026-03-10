@@ -1,12 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { UI_LANGUAGE_STORAGE_KEY, UI_TEXT, type UiLanguage } from "../../i18n";
+import {
+  UI_LANGUAGE_STORAGE_KEY,
+  UI_TEXT,
+  UI_THEME_STORAGE_KEY,
+  WIDGET_THEME_STORAGE_KEY,
+  type UiLanguage,
+  type UiTheme,
+  type WidgetThemeMode
+} from "../../i18n";
 import {
   autoSetupRuntime,
   cancelModelDownload as cancelModelDownloadCmd,
   clearHistoryArtifacts as clearHistoryArtifactsCmd,
   deleteModel as deleteModelCmd,
   downloadModel as downloadModelCmd,
+  getDefaultModelPath,
+  getDefaultWhisperCliPath,
   getComputeCapability as getComputeCapabilityCmd,
   getSettings,
   listModels,
@@ -49,11 +59,45 @@ const getWidgetSoundGain = (fileName: string) => {
   return WIDGET_SOUND_GAIN[key] ?? 1.0;
 };
 
+const loadInitialUiTheme = (): UiTheme => {
+  try {
+    const stored = localStorage.getItem(UI_THEME_STORAGE_KEY);
+    return stored === "dark" ? "dark" : "light";
+  } catch {
+    return "light";
+  }
+};
+
+const loadInitialWidgetThemeMode = (): WidgetThemeMode => {
+  try {
+    const stored = localStorage.getItem(WIDGET_THEME_STORAGE_KEY);
+    if (stored === "light" || stored === "dark" || stored === "follow") return stored;
+  } catch {
+    // ignore
+  }
+  return "follow";
+};
+
+const loadInitialUiLanguage = (): UiLanguage => {
+  try {
+    const stored = localStorage.getItem(UI_LANGUAGE_STORAGE_KEY);
+    if (stored === "fr" || stored === "en") return stored;
+  } catch {
+    // ignore
+  }
+  return "fr";
+};
+
 export function useMainAppController() {
   const [settings, setSettings] = useState<UserSettings>(defaultSettings);
   const [savedSettings, setSavedSettings] = useState<UserSettings>(defaultSettings);
+  const settingsRef = useRef<UserSettings>(defaultSettings);
+  const savedSettingsRef = useRef<UserSettings>(defaultSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [uiLanguage, setUiLanguage] = useState<UiLanguage>("fr");
+  const [uiLanguage, setUiLanguage] = useState<UiLanguage>(loadInitialUiLanguage);
+  const [uiTheme, setUiTheme] = useState<UiTheme>(loadInitialUiTheme);
+  const [widgetThemeMode, setWidgetThemeMode] = useState<WidgetThemeMode>(loadInitialWidgetThemeMode);
+  const [savedWidgetThemeMode, setSavedWidgetThemeMode] = useState<WidgetThemeMode>(loadInitialWidgetThemeMode);
   const [settingsState, setSettingsState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [settingsError, setSettingsError] = useState("");
   const [shortcutDraft, setShortcutDraft] = useState(defaultSettings.shortcut);
@@ -68,6 +112,7 @@ export function useMainAppController() {
   const [translationError, setTranslationError] = useState("");
   const [translationTarget, setTranslationTarget] = useState<string>("none");
   const [textView, setTextView] = useState<"source" | "translated">("source");
+  const preferSourceTextViewRef = useRef(false);
 
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
   const [historyReady, setHistoryReady] = useState(false);
@@ -84,7 +129,22 @@ export function useMainAppController() {
   const [widgetSoundOptions, setWidgetSoundOptions] = useState<string[]>([DEFAULT_WIDGET_POP_SOUND]);
   const [previewSoundPlaying, setPreviewSoundPlaying] = useState(false);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previewAudioContextRef = useRef<AudioContext | null>(null);
+  const previewAudioSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const previewAudioGainRef = useRef<GainNode | null>(null);
   const uiText = UI_TEXT[uiLanguage];
+
+  const disconnectPreviewAudioGraph = () => {
+    try {
+      previewAudioSourceRef.current?.disconnect();
+      previewAudioGainRef.current?.disconnect();
+    } catch {
+      // ignore
+    } finally {
+      previewAudioSourceRef.current = null;
+      previewAudioGainRef.current = null;
+    }
+  };
 
   const modelDisplayLabel = (model: { id: string; label: string }) => uiText.modelLabels[model.id] ?? model.label;
   const activeModelLabel = useMemo(() => {
@@ -114,13 +174,21 @@ export function useMainAppController() {
     [translationTarget, translationOptions]
   );
   const settingsDirty = useMemo(
-    () => JSON.stringify(settings) !== JSON.stringify(savedSettings),
-    [settings, savedSettings]
+    () => JSON.stringify(settings) !== JSON.stringify(savedSettings) || widgetThemeMode !== savedWidgetThemeMode,
+    [settings, savedSettings, widgetThemeMode, savedWidgetThemeMode]
   );
   const isDownloadInProgress = useMemo(() => {
     const status = downloadProgress?.status ?? "";
     return status === "starting" || status === "downloading" || status === "canceling";
   }, [downloadProgress]);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  useEffect(() => {
+    savedSettingsRef.current = savedSettings;
+  }, [savedSettings]);
 
   const refreshModels = async () => {
     try {
@@ -145,7 +213,10 @@ export function useMainAppController() {
 
   const normalizeSettingsForUi = (loaded: UserSettings): UserSettings => {
     const normalizedOpacity = Math.max(0.25, Math.min(1, loaded.widget_opacity ?? defaultSettings.widget_opacity));
-    const normalizedPopSoundVolume = Math.max(0, Math.min(1, loaded.widget_pop_sound_volume ?? defaultSettings.widget_pop_sound_volume));
+    const normalizedPopSoundVolume = Math.max(
+      0,
+      Math.min(1, loaded.widget_pop_sound_volume ?? defaultSettings.widget_pop_sound_volume)
+    );
     const normalizedPopSound = (loaded.widget_pop_sound || DEFAULT_WIDGET_POP_SOUND).trim() || DEFAULT_WIDGET_POP_SOUND;
     const normalizedTranslationTarget = (loaded.translation_target || "none").trim().toLowerCase() || "none";
     return {
@@ -233,7 +304,9 @@ export function useMainAppController() {
         if (cleanedTranslated) {
           setTranslatedText(cleanedTranslated);
           setTranslationError("");
-          setTextView("translated");
+          if (!preferSourceTextViewRef.current) {
+            setTextView("translated");
+          }
           setStatusLine(uiText.statusTranslationDone);
           setTranslating(false);
           return;
@@ -246,7 +319,9 @@ export function useMainAppController() {
       const translated = await translateTextCmd(sourceText, translationTarget, sourceLangArg);
       setTranslatedText(translated);
       setTranslationError("");
-      setTextView("translated");
+      if (!preferSourceTextViewRef.current) {
+        setTextView("translated");
+      }
       setStatusLine(uiText.statusTranslationDone);
     } catch (e) {
       setTranslationError(String(e));
@@ -292,30 +367,41 @@ export function useMainAppController() {
   useEffect(() => {
     return () => {
       const audio = previewAudioRef.current;
-      if (!audio) return;
       try {
-        audio.pause();
+        if (audio) {
+          audio.pause();
+        }
+        disconnectPreviewAudioGraph();
+        if (previewAudioContextRef.current && previewAudioContextRef.current.state !== "closed") {
+          void previewAudioContextRef.current.close();
+        }
       } catch {
         // ignore
       }
       previewAudioRef.current = null;
+      previewAudioContextRef.current = null;
     };
   }, []);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(UI_LANGUAGE_STORAGE_KEY);
-      if (raw === "fr" || raw === "en") setUiLanguage(raw);
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  useEffect(() => {
     const onStorage = (event: StorageEvent) => {
-      if (event.key !== UI_LANGUAGE_STORAGE_KEY) return;
-      if (event.newValue === "fr" || event.newValue === "en") {
-        setUiLanguage(event.newValue);
+      if (event.key === UI_LANGUAGE_STORAGE_KEY) {
+        if (event.newValue === "fr" || event.newValue === "en") {
+          setUiLanguage(event.newValue);
+        }
+        return;
+      }
+      if (event.key === UI_THEME_STORAGE_KEY) {
+        if (event.newValue === "light" || event.newValue === "dark") {
+          setUiTheme(event.newValue);
+        }
+        return;
+      }
+      if (event.key === WIDGET_THEME_STORAGE_KEY) {
+        if (event.newValue === "follow" || event.newValue === "light" || event.newValue === "dark") {
+          setWidgetThemeMode(event.newValue);
+          setSavedWidgetThemeMode(event.newValue);
+        }
       }
     };
     window.addEventListener("storage", onStorage);
@@ -324,6 +410,7 @@ export function useMainAppController() {
 
   useEffect(() => {
     let unlistenUiLanguage: (() => void) | null = null;
+    let unlistenUiTheme: (() => void) | null = null;
     const bootstrap = async () => {
       unlistenUiLanguage = await listenEvent<{ language: UiLanguage }>("ui-language-changed", (payload) => {
         const next = payload.language;
@@ -331,10 +418,17 @@ export function useMainAppController() {
           setUiLanguage(next);
         }
       });
+      unlistenUiTheme = await listenEvent<{ theme: UiTheme }>("ui-theme-changed", (payload) => {
+        const next = payload.theme;
+        if (next === "light" || next === "dark") {
+          setUiTheme(next);
+        }
+      });
     };
     void bootstrap();
     return () => {
       if (unlistenUiLanguage) unlistenUiLanguage();
+      if (unlistenUiTheme) unlistenUiTheme();
     };
   }, []);
 
@@ -342,6 +436,17 @@ export function useMainAppController() {
     localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, uiLanguage);
     void emitEvent("ui-language-changed", { language: uiLanguage });
   }, [uiLanguage]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", uiTheme);
+    localStorage.setItem(UI_THEME_STORAGE_KEY, uiTheme);
+    void emitEvent("ui-theme-changed", { theme: uiTheme });
+  }, [uiTheme]);
+
+  useEffect(() => {
+    localStorage.setItem(WIDGET_THEME_STORAGE_KEY, widgetThemeMode);
+    void emitEvent("widget-theme-mode-changed", { mode: widgetThemeMode });
+  }, [widgetThemeMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -435,13 +540,18 @@ export function useMainAppController() {
             }
             setTranslatedText(payload.injected_text || "");
             setTranslationError("");
-            setTextView("translated");
+            if (!preferSourceTextViewRef.current) {
+              setTextView("translated");
+            }
             setStatusLine(uiText.statusTranslationDone);
           } else {
             setTranslatedText("");
-            setTextView("translated");
+            if (!preferSourceTextViewRef.current) {
+              setTextView("translated");
+            }
           }
         } else {
+          preferSourceTextViewRef.current = false;
           setTextView("source");
         }
         void updateModelMismatchWarning(payload.model_path);
@@ -502,9 +612,11 @@ export function useMainAppController() {
 
   const saveSettingsSnapshot = async (next: UserSettings, successLabel = uiText.settingsSaved) => {
     const shortcutFromDraft = shortcutDraft.trim();
+    const shortcutFromNext = (next.shortcut || "").trim();
+    const effectiveShortcut = shortcutFromNext || shortcutFromDraft;
     const payload: UserSettings = {
       ...next,
-      shortcut: shortcutFromDraft || next.shortcut
+      shortcut: effectiveShortcut
     };
     if (!payload.shortcut.trim()) {
       setSettingsState("error");
@@ -517,6 +629,7 @@ export function useMainAppController() {
       await saveSettingsCmd(payload);
       setSettings(payload);
       setSavedSettings(payload);
+      setSavedWidgetThemeMode(widgetThemeMode);
       setShortcutDraft(payload.shortcut);
       setSettingsState("saved");
       setStatusLine(successLabel);
@@ -534,21 +647,57 @@ export function useMainAppController() {
     }
   };
 
-  const closeSettingsPanel = async () => {
-    if (settingsDirty) {
-      const ok = await saveSettingsSnapshot(settings, uiText.settingsSaved);
-      if (!ok) return;
-    }
+  const mergeBackendSettingsPreservingDraft = (loaded: UserSettings) => {
+    const backend = normalizeSettingsForUi(loaded);
+    const current = settingsRef.current;
+    const saved = savedSettingsRef.current;
+    const merged: UserSettings = { ...backend };
+
+    (Object.keys(current) as Array<keyof UserSettings>).forEach((key) => {
+      if (current[key] !== saved[key]) {
+        (merged as Record<string, string | number | boolean>)[key] = current[key];
+      }
+    });
+
+    setSavedSettings(backend);
+    setSettings(merged);
+    setShortcutDraft(merged.shortcut);
+    setTranslationTarget((prev) => (prev === merged.translation_target ? prev : merged.translation_target));
+  };
+
+  const closeSettingsPanel = () => {
+    const stable = savedSettingsRef.current;
+    setSettings(stable);
+    setWidgetThemeMode(savedWidgetThemeMode);
+    setShortcutDraft(stable.shortcut);
+    setTranslationTarget(stable.translation_target);
+    setSettingsError("");
+    setSettingsState("idle");
+    setCapturingShortcut(false);
     setSettingsOpen(false);
   };
 
   const resetSettingsToDefaults = async () => {
     const shouldReset = window.confirm(uiText.confirmResetOptions);
     if (!shouldReset) return;
+
+    let defaultModelPath = settings.model_path;
+    let defaultWhisperCliPath = settings.whisper_cli_path;
+    try {
+      const [modelPath, cliPath] = await Promise.all([getDefaultModelPath(), getDefaultWhisperCliPath()]);
+      defaultModelPath = modelPath || defaultModelPath;
+      defaultWhisperCliPath = cliPath || defaultWhisperCliPath;
+    } catch {
+      // keep current paths if defaults are unavailable
+    }
+
     const next: UserSettings = {
       ...settings,
       language: defaultSettings.language,
+      translation_target: defaultSettings.translation_target,
       shortcut: defaultSettings.shortcut,
+      model_path: defaultModelPath,
+      whisper_cli_path: defaultWhisperCliPath,
       compute_mode: defaultSettings.compute_mode,
       keep_model_loaded: false,
       widget_enabled: defaultSettings.widget_enabled,
@@ -556,8 +705,10 @@ export function useMainAppController() {
       widget_opacity: defaultSettings.widget_opacity,
       widget_pop_sound_volume: defaultSettings.widget_pop_sound_volume,
       widget_pop_sound: defaultSettings.widget_pop_sound,
-      voice_commands_enabled: defaultSettings.voice_commands_enabled
+      voice_commands_enabled: defaultSettings.voice_commands_enabled,
+      onboarding_completed: defaultSettings.onboarding_completed
     };
+    setCapturingShortcut(false);
     setShortcutDraft(next.shortcut);
     setTranslationTarget(next.translation_target);
     await saveSettingsSnapshot(next, uiText.settingsResetDone);
@@ -578,10 +729,7 @@ export function useMainAppController() {
     try {
       const message = await downloadModelCmd(modelId);
       const loadedSettings = await getSettings<UserSettings>();
-      const normalized = normalizeSettingsForUi(loadedSettings);
-      setSettings(normalized);
-      setSavedSettings(normalized);
-      setShortcutDraft(loadedSettings.shortcut);
+      mergeBackendSettingsPreservingDraft(loadedSettings);
       await refreshModels();
       setStatusLine(message);
     } catch (e) {
@@ -606,10 +754,7 @@ export function useMainAppController() {
     try {
       const message = await setActiveModelCmd(modelId);
       const loadedSettings = await getSettings<UserSettings>();
-      const normalized = normalizeSettingsForUi(loadedSettings);
-      setSettings(normalized);
-      setSavedSettings(normalized);
-      setShortcutDraft(loadedSettings.shortcut);
+      mergeBackendSettingsPreservingDraft(loadedSettings);
       await refreshModels();
       setStatusLine(message);
     } catch (e) {
@@ -625,10 +770,7 @@ export function useMainAppController() {
     try {
       const message = await deleteModelCmd(modelId);
       const loadedSettings = await getSettings<UserSettings>();
-      const normalized = normalizeSettingsForUi(loadedSettings);
-      setSettings(normalized);
-      setSavedSettings(normalized);
-      setShortcutDraft(loadedSettings.shortcut);
+      mergeBackendSettingsPreservingDraft(loadedSettings);
       await refreshModels();
       setStatusLine(message);
     } catch (e) {
@@ -645,10 +787,7 @@ export function useMainAppController() {
       const message = await autoSetupRuntime();
       setStatusLine(message || uiText.statusEngineChecked);
       const loadedSettings = await getSettings<UserSettings>();
-      const normalized = normalizeSettingsForUi(loadedSettings);
-      setSettings(normalized);
-      setSavedSettings(normalized);
-      setShortcutDraft(loadedSettings.shortcut);
+      mergeBackendSettingsPreservingDraft(loadedSettings);
       const capability = await getComputeCapabilityCmd<ComputeCapabilityReport>();
       setComputeCapability(capability);
     } catch (e) {
@@ -660,6 +799,7 @@ export function useMainAppController() {
   };
 
   const startRecording = async () => {
+    preferSourceTextViewRef.current = false;
     setErrorLine("");
     setTranscript("");
     setTranslatedText("");
@@ -688,8 +828,11 @@ export function useMainAppController() {
       addHistoryItem(result.text, outputPath, result.model_path);
       if (translationTarget !== "none") {
         setTranslatedText("");
-        setTextView("translated");
+        if (!preferSourceTextViewRef.current) {
+          setTextView("translated");
+        }
       } else {
+        preferSourceTextViewRef.current = false;
         setTextView("source");
       }
       await updateModelMismatchWarning(result.model_path);
@@ -780,15 +923,46 @@ export function useMainAppController() {
         previewAudioRef.current.pause();
         previewAudioRef.current.currentTime = 0;
       }
+      disconnectPreviewAudioGraph();
+
       const audio = new Audio(`/sounds/${selected}`);
       audio.preload = "auto";
-      audio.volume = clamp01(settings.widget_pop_sound_volume * getWidgetSoundGain(selected));
+      const desiredVolume = clamp01(settings.widget_pop_sound_volume * getWidgetSoundGain(selected));
+      const AudioContextCtor =
+        window.AudioContext ||
+        (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+      if (AudioContextCtor) {
+        const context = previewAudioContextRef.current ?? new AudioContextCtor();
+        previewAudioContextRef.current = context;
+        if (context.state === "suspended") {
+          await context.resume();
+        }
+        const source = context.createMediaElementSource(audio);
+        const gain = context.createGain();
+        gain.gain.value = desiredVolume;
+        source.connect(gain);
+        gain.connect(context.destination);
+        previewAudioSourceRef.current = source;
+        previewAudioGainRef.current = gain;
+        audio.volume = 1;
+      } else {
+        audio.volume = desiredVolume;
+      }
+
       previewAudioRef.current = audio;
       setPreviewSoundPlaying(true);
-      audio.onended = () => setPreviewSoundPlaying(false);
-      audio.onerror = () => setPreviewSoundPlaying(false);
+      audio.onended = () => {
+        disconnectPreviewAudioGraph();
+        setPreviewSoundPlaying(false);
+      };
+      audio.onerror = () => {
+        disconnectPreviewAudioGraph();
+        setPreviewSoundPlaying(false);
+      };
       await audio.play();
     } catch {
+      disconnectPreviewAudioGraph();
       setPreviewSoundPlaying(false);
       setStatusLine(uiText.previewSoundError);
     }
@@ -803,6 +977,7 @@ export function useMainAppController() {
       // keep UI responsive even if persistence fails
     });
     if (next === "none") {
+      preferSourceTextViewRef.current = false;
       setTranslatedText("");
       setTranslationError("");
       setTextView("source");
@@ -811,11 +986,28 @@ export function useMainAppController() {
     }
   };
 
+  const showOriginalText = () => {
+    preferSourceTextViewRef.current = true;
+    setTextView("source");
+  };
+
+  const showTranslatedText = () => {
+    preferSourceTextViewRef.current = false;
+    setTextView("translated");
+  };
+
+  const toggleUiTheme = () => {
+    setUiTheme((current) => (current === "light" ? "dark" : "light"));
+  };
+
   const disabled = working || settingsState === "saving";
 
   return {
     uiLanguage,
     setUiLanguage,
+    uiTheme,
+    setUiTheme,
+    toggleUiTheme,
     uiText,
     disabled,
     settingsOpen,
@@ -854,6 +1046,8 @@ export function useMainAppController() {
         onStopRecordingAndTranscribe: () => void stopRecordingAndTranscribe(),
         onActivateModel: (modelId: string) => void activateModel(modelId),
         onTranslationTargetChange: handleTranslationTargetChange,
+        onShowOriginalText: showOriginalText,
+        onShowTranslatedText: showTranslatedText,
         onCopyVisibleText: () => void copyVisibleText()
       }
     },
@@ -890,6 +1084,7 @@ export function useMainAppController() {
         downloadingModelId,
         widgetSoundOptions,
         previewSoundPlaying,
+        widgetThemeMode,
         widgetSoundLabel,
         modelDisplayLabel
       },
@@ -905,6 +1100,13 @@ export function useMainAppController() {
         onResetSettings: () => void resetSettingsToDefaults(),
         onRepairRuntime: () => void repairRuntime(),
         onCancelModelDownload: () => void cancelModelDownload(),
+        onWidgetSoundChange: (soundFile: string) =>
+          setSettings((current) => ({ ...current, widget_pop_sound: soundFile })),
+        onWidgetThemeModeChange: (mode: WidgetThemeMode) => setWidgetThemeMode(mode),
+        onWidgetSoundVolumeChange: (volume: number) =>
+          setSettings((current) => ({ ...current, widget_pop_sound_volume: clamp01(volume) })),
+        onWidgetOpacityChange: (opacity: number) =>
+          setSettings((current) => ({ ...current, widget_opacity: Math.max(0.25, Math.min(1, opacity)) })),
         onPreviewWidgetSound: () => void previewWidgetSound(),
         onDownloadModel: (modelId: string) => void downloadModel(modelId),
         onRemoveModel: (modelId: string) => void removeModel(modelId)

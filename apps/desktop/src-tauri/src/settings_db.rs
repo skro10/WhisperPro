@@ -89,7 +89,9 @@ pub(crate) fn get_settings_from_db(
             widget_enabled: widget_enabled != 0,
             widget_autohide: widget_autohide != 0,
             widget_opacity: super::clamp_widget_opacity(widget_opacity as f32),
-            widget_pop_sound_volume: super::clamp_widget_pop_sound_volume(widget_pop_sound_volume as f32),
+            widget_pop_sound_volume: super::normalize_widget_pop_sound_volume_from_db(
+                widget_pop_sound_volume as f32,
+            ),
             widget_pop_sound: super::normalize_widget_pop_sound(&widget_pop_sound),
             voice_commands_enabled: voice_commands_enabled != 0,
             onboarding_completed: onboarding_completed != 0,
