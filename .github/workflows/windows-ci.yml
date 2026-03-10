@@ -31,5 +31,12 @@ jobs:
         working-directory: apps/desktop
         run: npm run build
 
+      - name: Frontend typecheck
+        working-directory: apps/desktop
+        run: npm run typecheck
+
       - name: Rust check workspace
         run: cargo check --workspace
+
+      - name: Rust test workspace
+        run: cargo test --workspace
